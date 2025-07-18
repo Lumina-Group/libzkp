@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use sha2::{Digest, Sha256};
 
 #[pyfunction]
 pub fn prove_equality(val1: u64, val2: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
@@ -8,7 +9,10 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
         ));
     }
     let commitment = val1.to_le_bytes().to_vec();
-    let proof = b"dummy_equality_proof".to_vec();
+    let mut hasher = Sha256::new();
+    hasher.update(b"equality");
+    hasher.update(&commitment);
+    let proof = hasher.finalize().to_vec();
     Ok((proof, commitment))
 }
 
@@ -19,12 +23,15 @@ pub fn verify_equality(
     val1: u64,
     val2: u64,
 ) -> PyResult<bool> {
-    if proof != b"dummy_equality_proof" {
-        return Ok(false);
-    }
     if commitment.len() != 8 {
         return Ok(false);
     }
-    let val = u64::from_le_bytes(commitment.try_into().unwrap());
-    Ok(val == val1 && val == val2)
+    let val = u64::from_le_bytes(commitment.clone().try_into().unwrap());
+    if val != val1 || val != val2 {
+        return Ok(false);
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"equality");
+    hasher.update(&commitment);
+    Ok(proof == hasher.finalize().to_vec())
 }
