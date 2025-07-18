@@ -1,6 +1,4 @@
 # libzkp
-
-[![License](https://img.shields.io/badge/license-Apache-2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org)
 
@@ -10,7 +8,7 @@ libzkp は、Python、Rust から利用可能な高性能なゼロ知識証明 (
 
 - **高性能**: Rust による実装で高速な証明生成・検証
 - **多様な証明タイプ**: 6種類の実用的なゼロ知識証明をサポート
-- **複数のバックエンド**: Bulletproofs、SNARK、STARK の3つの暗号学的バックエンド
+- **複数のバックエンド**: Bulletproofs、SNARK、STARK の3つのバックエンド
 - **Python統合**: シンプルで使いやすい Python API
 - **型安全**: Rust の型システムによる安全性
 
