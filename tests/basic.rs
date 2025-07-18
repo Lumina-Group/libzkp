@@ -34,7 +34,7 @@ use libzkp::improvement_proof::*;
 
 #[test]
 fn test_improvement() {
-    let (proof, comm) = prove_improvement(1, 2).unwrap();
+    let (proof, comm) = prove_improvement(1, 8).unwrap();
     assert!(verify_improvement(proof, comm, 1).unwrap());
 }
 
