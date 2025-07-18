@@ -25,7 +25,7 @@ libzkp は、Python から利用可能な高性能なゼロ知識証明 (Zero-Kn
 | **向上証明** (Improvement Proof) | 値が増加したことを証明 | 成績向上、パフォーマンス改善 |
 | **整合性証明** (Consistency Proof) | データが昇順に並んでいることを証明 | データ検証、監査 |
 
-## 暗号学的バックエンド
+## バックエンド
 
 - **Bulletproofs**: 効率的な範囲証明に特化
 - **SNARK** (Succinct Non-interactive ARgument of Knowledge): 簡潔な証明サイズ
