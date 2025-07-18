@@ -1,7 +1,7 @@
 [package]
 name = "libzkp"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [lib]
 name = "libzkp"
@@ -19,3 +19,4 @@ ark-serialize = "0.5"
 ark-std = "0.5"
 ark-relations = "0.5"
 ark-snark = "0.5"
+winterfell = "0.13"
