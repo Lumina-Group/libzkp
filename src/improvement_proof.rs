@@ -1,5 +1,5 @@
+use crate::backend::{stark::StarkBackend, ZkpBackend};
 use pyo3::prelude::*;
-use sha2::{Digest, Sha256};
 
 #[pyfunction]
 pub fn prove_improvement(old: u64, new: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
@@ -8,11 +8,18 @@ pub fn prove_improvement(old: u64, new: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
             "no improvement",
         ));
     }
+    let diff = new - old;
+    let steps = diff + 1;
+    if steps < 8 || !steps.is_power_of_two() {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "unsupported improvement size",
+        ));
+    }
+    let mut data = Vec::new();
+    data.extend_from_slice(&old.to_le_bytes());
+    data.extend_from_slice(&steps.to_le_bytes());
+    let proof = StarkBackend::prove(&data);
     let commitment = new.to_le_bytes().to_vec();
-    let mut hasher = Sha256::new();
-    hasher.update(b"improvement");
-    hasher.update(&commitment);
-    let proof = hasher.finalize().to_vec();
     Ok((proof, commitment))
 }
 
@@ -25,8 +32,13 @@ pub fn verify_improvement(proof: Vec<u8>, commitment: Vec<u8>, old: u64) -> PyRe
     if new_val <= old {
         return Ok(false);
     }
-    let mut hasher = Sha256::new();
-    hasher.update(b"improvement");
-    hasher.update(&commitment);
-    Ok(proof == hasher.finalize().to_vec())
+    let diff = new_val - old;
+    let steps = diff + 1;
+    if steps < 8 || !steps.is_power_of_two() {
+        return Ok(false);
+    }
+    let mut data = Vec::new();
+    data.extend_from_slice(&old.to_le_bytes());
+    data.extend_from_slice(&steps.to_le_bytes());
+    Ok(StarkBackend::verify(&proof, &data))
 }

@@ -10,7 +10,7 @@ use winterfell::{
     TracePolyTable, TraceTable, TransitionConstraintDegree,
 };
 
-// Build execution trace for the work function x_{i+1} = x_i^3 + 42.
+// Build execution trace for the work function x_{i+1} = x_i + 1.
 fn build_trace(start: BaseElement, steps: usize) -> TraceTable<BaseElement> {
     let trace_width = 1;
     let mut trace = TraceTable::new(trace_width, steps);
@@ -19,7 +19,7 @@ fn build_trace(start: BaseElement, steps: usize) -> TraceTable<BaseElement> {
             state[0] = start;
         },
         |_, state| {
-            state[0] = state[0].exp(3u32.into()) + BaseElement::new(42);
+            state[0] = state[0] + BaseElement::ONE;
         },
     );
     trace
@@ -29,7 +29,7 @@ fn build_trace(start: BaseElement, steps: usize) -> TraceTable<BaseElement> {
 fn compute_result(start: BaseElement, steps: usize) -> BaseElement {
     let mut result = start;
     for _ in 1..steps {
-        result = result.exp(3u32.into()) + BaseElement::new(42);
+        result += BaseElement::ONE;
     }
     result
 }
@@ -59,7 +59,7 @@ impl Air for WorkAir {
 
     fn new(trace_info: TraceInfo, pub_inputs: PublicInputs, options: ProofOptions) -> Self {
         assert_eq!(1, trace_info.width());
-        let degrees = vec![TransitionConstraintDegree::new(3)];
+        let degrees = vec![TransitionConstraintDegree::new(1)];
         WorkAir {
             context: AirContext::new(trace_info, degrees, 2, options),
             start: pub_inputs.start,
@@ -78,7 +78,7 @@ impl Air for WorkAir {
         result: &mut [E],
     ) {
         let current = frame.current()[0];
-        let next_expected = current.exp(3u32.into()) + E::from(42u32);
+        let next_expected = current + E::ONE;
         result[0] = frame.next()[0] - next_expected;
     }
 

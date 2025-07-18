@@ -1,5 +1,5 @@
+use crate::backend::{snark::SnarkBackend, ZkpBackend};
 use pyo3::prelude::*;
-use sha2::{Digest, Sha256};
 
 #[pyfunction]
 pub fn prove_equality(val1: u64, val2: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
@@ -8,11 +8,11 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
             "values are not equal",
         ));
     }
+    let mut data = Vec::new();
+    data.extend_from_slice(&val1.to_le_bytes());
+    data.extend_from_slice(&val2.to_le_bytes());
+    let proof = SnarkBackend::prove(&data);
     let commitment = val1.to_le_bytes().to_vec();
-    let mut hasher = Sha256::new();
-    hasher.update(b"equality");
-    hasher.update(&commitment);
-    let proof = hasher.finalize().to_vec();
     Ok((proof, commitment))
 }
 
@@ -30,8 +30,8 @@ pub fn verify_equality(
     if val != val1 || val != val2 {
         return Ok(false);
     }
-    let mut hasher = Sha256::new();
-    hasher.update(b"equality");
-    hasher.update(&commitment);
-    Ok(proof == hasher.finalize().to_vec())
+    let mut data = Vec::new();
+    data.extend_from_slice(&val1.to_le_bytes());
+    data.extend_from_slice(&val2.to_le_bytes());
+    Ok(SnarkBackend::verify(&proof, &data))
 }

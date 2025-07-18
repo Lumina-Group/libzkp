@@ -1,5 +1,5 @@
+use crate::backend::{bulletproofs::BulletproofsBackend, ZkpBackend};
 use pyo3::prelude::*;
-use sha2::{Digest, Sha256};
 
 #[pyfunction]
 pub fn prove_range(value: u64, min: u64, max: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
@@ -8,25 +8,25 @@ pub fn prove_range(value: u64, min: u64, max: u64) -> PyResult<(Vec<u8>, Vec<u8>
             "value out of range",
         ));
     }
-    let commitment = value.to_le_bytes().to_vec();
-    let mut hasher = Sha256::new();
-    hasher.update(b"range");
-    hasher.update(&commitment);
-    let proof = hasher.finalize().to_vec();
+    let data = value.to_le_bytes();
+    let out = BulletproofsBackend::prove(&data);
+    if out.len() < 32 {
+        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "proof generation failed",
+        ));
+    }
+    let proof_len = out.len() - 32;
+    let proof = out[..proof_len].to_vec();
+    let commitment = out[proof_len..].to_vec();
     Ok((proof, commitment))
 }
 
 #[pyfunction]
 pub fn verify_range(proof: Vec<u8>, commitment: Vec<u8>, min: u64, max: u64) -> PyResult<bool> {
-    if commitment.len() != 8 {
+    if commitment.len() != 32 {
         return Ok(false);
     }
-    let val = u64::from_le_bytes(commitment.clone().try_into().unwrap());
-    if val < min || val > max {
-        return Ok(false);
-    }
-    let mut hasher = Sha256::new();
-    hasher.update(b"range");
-    hasher.update(&commitment);
-    Ok(proof == hasher.finalize().to_vec())
+    let mut proof_full = proof.clone();
+    proof_full.extend_from_slice(&commitment);
+    Ok(BulletproofsBackend::verify(&proof_full, &[]))
 }
