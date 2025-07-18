@@ -3,8 +3,8 @@ use bulletproofs::{BulletproofGens, PedersenGens, RangeProof};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use rand::RngCore;
 use rand::rngs::OsRng;
+use rand::RngCore;
 
 pub struct BulletproofsBackend;
 

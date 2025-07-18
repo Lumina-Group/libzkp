@@ -3,11 +3,11 @@ use winterfell::{
     crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree},
     math::{fields::f128::BaseElement, FieldElement, ToElements},
     matrix::ColMatrix,
-    Air, AirContext, Assertion, EvaluationFrame, FieldExtension, Proof, ProofOptions,
-    Prover, TraceInfo, TransitionConstraintDegree, TraceTable, verify, AcceptableOptions,
-    BatchingMethod, Trace, PartitionOptions, StarkDomain, CompositionPolyTrace,
-    CompositionPoly, DefaultTraceLde, TracePolyTable, DefaultConstraintEvaluator,
-    DefaultConstraintCommitment, ConstraintCompositionCoefficients, AuxRandElements,
+    verify, AcceptableOptions, Air, AirContext, Assertion, AuxRandElements, BatchingMethod,
+    CompositionPoly, CompositionPolyTrace, ConstraintCompositionCoefficients,
+    DefaultConstraintCommitment, DefaultConstraintEvaluator, DefaultTraceLde, EvaluationFrame,
+    FieldExtension, PartitionOptions, Proof, ProofOptions, Prover, StarkDomain, Trace, TraceInfo,
+    TracePolyTable, TraceTable, TransitionConstraintDegree,
 };
 
 // Build execution trace for the work function x_{i+1} = x_i^3 + 42.
@@ -200,8 +200,17 @@ impl ZkpBackend for StarkBackend {
             Ok(p) => p,
             Err(_) => return false,
         };
-        let pub_inputs = PublicInputs { start: start_el, result };
+        let pub_inputs = PublicInputs {
+            start: start_el,
+            result,
+        };
         let opts = AcceptableOptions::MinConjecturedSecurity(95);
-        verify::<WorkAir, Blake3_256<BaseElement>, DefaultRandomCoin<Blake3_256<BaseElement>>, MerkleTree<Blake3_256<BaseElement>>>(proof, pub_inputs, &opts).is_ok()
+        verify::<
+            WorkAir,
+            Blake3_256<BaseElement>,
+            DefaultRandomCoin<Blake3_256<BaseElement>>,
+            MerkleTree<Blake3_256<BaseElement>>,
+        >(proof, pub_inputs, &opts)
+        .is_ok()
     }
 }

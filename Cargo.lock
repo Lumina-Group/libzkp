@@ -589,6 +589,7 @@ dependencies = [
  "merlin",
  "pyo3",
  "rand",
+ "sha2",
  "winterfell",
 ]
 

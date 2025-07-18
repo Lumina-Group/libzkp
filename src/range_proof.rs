@@ -1,4 +1,5 @@
 use pyo3::prelude::*;
+use sha2::{Digest, Sha256};
 
 #[pyfunction]
 pub fn prove_range(value: u64, min: u64, max: u64) -> PyResult<(Vec<u8>, Vec<u8>)> {
@@ -8,18 +9,24 @@ pub fn prove_range(value: u64, min: u64, max: u64) -> PyResult<(Vec<u8>, Vec<u8>
         ));
     }
     let commitment = value.to_le_bytes().to_vec();
-    let proof = b"dummy_range_proof".to_vec();
+    let mut hasher = Sha256::new();
+    hasher.update(b"range");
+    hasher.update(&commitment);
+    let proof = hasher.finalize().to_vec();
     Ok((proof, commitment))
 }
 
 #[pyfunction]
 pub fn verify_range(proof: Vec<u8>, commitment: Vec<u8>, min: u64, max: u64) -> PyResult<bool> {
-    if proof != b"dummy_range_proof" {
-        return Ok(false);
-    }
     if commitment.len() != 8 {
         return Ok(false);
     }
-    let val = u64::from_le_bytes(commitment.try_into().unwrap());
-    Ok(val >= min && val <= max)
+    let val = u64::from_le_bytes(commitment.clone().try_into().unwrap());
+    if val < min || val > max {
+        return Ok(false);
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(b"range");
+    hasher.update(&commitment);
+    Ok(proof == hasher.finalize().to_vec())
 }
