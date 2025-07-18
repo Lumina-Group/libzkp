@@ -1,24 +1,34 @@
+
+use crate::backend::bulletproofs::BulletproofsBackend;
 use crate::proof::{Proof, PROOF_VERSION};
-use crate::utils::{pedersen_commit, pedersen_commit_with_blind};
-use curve25519_dalek::scalar::Scalar;
 use pyo3::prelude::*;
-use std::collections::HashSet;
 
 const SCHEME_ID: u8 = 4;
 
 #[pyfunction]
 pub fn prove_membership(value: u64, set: Vec<u64>) -> PyResult<Vec<u8>> {
-    let s: HashSet<u64> = set.into_iter().collect();
-    if !s.contains(&value) {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "value not in set",
+    let backend_proof = BulletproofsBackend::prove_set_membership(value, set)
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+    
+    let commit_marker = b"COMMIT:";
+    let commit_pos = backend_proof.windows(commit_marker.len())
+        .position(|window| window == commit_marker)
+        .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "invalid backend proof format"
+        ))?;
+    
+    let proof_bytes = &backend_proof[0..commit_pos];
+    let commit_start = commit_pos + commit_marker.len();
+    
+    if backend_proof.len() < commit_start + 32 {
+        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "invalid commitment in backend proof"
         ));
     }
-    let (commit, blind) = pedersen_commit(value);
-    let mut proof_bytes = Vec::with_capacity(8 + 32);
-    proof_bytes.extend_from_slice(&value.to_le_bytes());
-    proof_bytes.extend_from_slice(&blind.to_bytes());
-    let proof = Proof::new(SCHEME_ID, proof_bytes, commit.as_bytes().to_vec());
+    
+    let commitment = backend_proof[commit_start..commit_start + 32].to_vec();
+    
+    let proof = Proof::new(SCHEME_ID, proof_bytes.to_vec(), commitment);
     Ok(proof.to_bytes())
 }
 
@@ -28,22 +38,19 @@ pub fn verify_membership(proof: Vec<u8>, set: Vec<u64>) -> PyResult<bool> {
         Some(p) => p,
         None => return Ok(false),
     };
+    
     if proof.version != PROOF_VERSION || proof.scheme != SCHEME_ID {
         return Ok(false);
     }
-    if proof.commitment.len() != 32 || proof.proof.len() != 40 {
+    
+    if proof.commitment.len() != 32 {
         return Ok(false);
     }
-    let value = u64::from_le_bytes(proof.proof[0..8].try_into().unwrap());
-    let s: HashSet<u64> = set.into_iter().collect();
-    if !s.contains(&value) {
-        return Ok(false);
-    }
-    let blind_ct = Scalar::from_canonical_bytes(proof.proof[8..40].try_into().unwrap());
-    if blind_ct.is_none().into() {
-        return Ok(false);
-    }
-    let blind = blind_ct.unwrap();
-    let commit = pedersen_commit_with_blind(value, blind);
-    Ok(commit.as_bytes() == proof.commitment.as_slice())
+    
+    let mut backend_proof = Vec::new();
+    backend_proof.extend_from_slice(&proof.proof);
+    backend_proof.extend_from_slice(b"COMMIT:");
+    backend_proof.extend_from_slice(&proof.commitment);
+    
+    Ok(BulletproofsBackend::verify_set_membership(&backend_proof, set))
 }
