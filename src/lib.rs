@@ -9,7 +9,6 @@ pub mod threshold_proof;
 
 pub mod backend;
 pub mod proof;
-pub mod utils;
 
 #[pymodule]
 fn libzkp(_py: Python, m: &PyModule) -> PyResult<()> {
