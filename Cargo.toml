@@ -9,3 +9,13 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 pyo3 = { version = "0.21", features = ["auto-initialize"] }
+bulletproofs = "5.0"
+curve25519-dalek = "4.1"
+merlin = "3.0"
+rand = "0.8"
+ark-groth16 = "0.5"
+ark-bn254 = "0.5"
+ark-serialize = "0.5"
+ark-std = "0.5"
+ark-relations = "0.5"
+ark-snark = "0.5"
