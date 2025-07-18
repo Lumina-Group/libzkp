@@ -8,6 +8,7 @@ pub mod set_membership;
 pub mod threshold_proof;
 
 pub mod backend;
+pub mod proof;
 pub mod utils;
 
 #[pymodule]
