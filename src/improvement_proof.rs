@@ -1,4 +1,3 @@
-
 use crate::backend::{stark::StarkBackend, ZkpBackend};
 use crate::proof::{Proof, PROOF_VERSION};
 use pyo3::prelude::*;
@@ -12,31 +11,25 @@ pub fn prove_improvement(old: u64, new: u64) -> PyResult<Vec<u8>> {
             "no improvement",
         ));
     }
-    
+
     let diff = new - old;
-    
-    let steps = if diff < 8 {
-        8 
-    } else {
-        diff.next_power_of_two().max(8)
-    };
-    
+
     let mut data = Vec::new();
     data.extend_from_slice(&old.to_le_bytes());
-    data.extend_from_slice(&steps.to_le_bytes());
-    
+    data.extend_from_slice(&new.to_le_bytes());
+
     let stark_proof = StarkBackend::prove(&data);
-    
+
     if stark_proof.is_empty() {
         return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-            "STARK proof generation failed"
+            "STARK proof generation failed",
         ));
     }
-    
+
     let mut commitment = Vec::new();
-    commitment.extend_from_slice(&diff.to_le_bytes()); 
-    commitment.extend_from_slice(&steps.to_le_bytes());
-    
+    commitment.extend_from_slice(&diff.to_le_bytes());
+    commitment.extend_from_slice(&new.to_le_bytes());
+
     let proof = Proof::new(SCHEME_ID, stark_proof, commitment);
     Ok(proof.to_bytes())
 }
@@ -47,37 +40,29 @@ pub fn verify_improvement(proof: Vec<u8>, old: u64) -> PyResult<bool> {
         Some(p) => p,
         None => return Ok(false),
     };
-    
+
     if proof.version != PROOF_VERSION || proof.scheme != SCHEME_ID {
         return Ok(false);
     }
-    
+
     if proof.commitment.len() != 16 {
         return Ok(false);
     }
-    
+
     let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
-    let steps = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
-    
+    let new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
+
     if diff == 0 {
         return Ok(false);
     }
-    
-    let _new = old + diff;
-    
-    let expected_steps = if diff < 8 {
-        8
-    } else {
-        diff.next_power_of_two().max(8)
-    };
-    
-    if steps != expected_steps {
+
+    if new != old + diff {
         return Ok(false);
     }
-    
+
     let mut data = Vec::new();
     data.extend_from_slice(&old.to_le_bytes());
-    data.extend_from_slice(&steps.to_le_bytes());
-    
+    data.extend_from_slice(&new.to_le_bytes());
+
     Ok(StarkBackend::verify(&proof.proof, &data))
 }

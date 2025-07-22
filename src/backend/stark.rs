@@ -23,14 +23,6 @@ fn build_trace(start: BaseElement, steps: usize) -> TraceTable<BaseElement> {
     trace
 }
 
-fn compute_result(start: BaseElement, steps: usize) -> BaseElement {
-    let mut result = start;
-    for _ in 1..steps {
-        result += BaseElement::ONE;
-    }
-    result
-}
-
 struct PublicInputs {
     start: BaseElement,
     result: BaseElement,
@@ -164,7 +156,11 @@ impl ZkpBackend for StarkBackend {
             return vec![];
         }
         let start = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let steps = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
+        let end = u64::from_le_bytes(data[8..16].try_into().unwrap());
+        if end < start {
+            return vec![];
+        }
+        let steps = (end - start) as usize + 1;
         let start_el = BaseElement::new(start as u128);
         let prover = WorkProver::new(ProofOptions::new(
             32,
@@ -186,9 +182,12 @@ impl ZkpBackend for StarkBackend {
             return false;
         }
         let start = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let steps = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
+        let end = u64::from_le_bytes(data[8..16].try_into().unwrap());
+        if end < start {
+            return false;
+        }
         let start_el = BaseElement::new(start as u128);
-        let result = compute_result(start_el, steps);
+        let result = BaseElement::new(end as u128);
         let proof = match Proof::from_bytes(proof) {
             Ok(p) => p,
             Err(_) => return false,
