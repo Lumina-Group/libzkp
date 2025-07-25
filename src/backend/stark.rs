@@ -166,19 +166,24 @@ impl ZkpBackend for StarkBackend {
         let start = u64::from_le_bytes(data[0..8].try_into().unwrap());
         let steps = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
         let start_el = BaseElement::new(start as u128);
-        let prover = WorkProver::new(ProofOptions::new(
-            32,
-            8,
-            0,
+        // TODO: allow customizing proof options
+        let options = ProofOptions::new(
+            32, // num_queries
+            8,  // blowup_factor
+            0,  // grinding_factor
             FieldExtension::None,
-            8,
-            31,
+            8, // lde_domain_segment_width
+            31, // fri_folding_factor
             BatchingMethod::Linear,
-            BatchingMethod::Linear,
-        ));
+            BatchingMethod::Linear
+        );
+        let prover = WorkProver::new(options);
         let trace = build_trace(start_el, steps);
-        let proof = prover.prove(trace).expect("failed to prove");
-        proof.to_bytes()
+        let proof = prover.prove(trace);
+        match proof {
+            Ok(p) => p.to_bytes(),
+            Err(_) => vec![],
+        }
     }
 
     fn verify(proof: &[u8], data: &[u8]) -> bool {

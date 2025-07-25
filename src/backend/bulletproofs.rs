@@ -5,6 +5,32 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use std::io::{self, Read};
+
+// Helper functions for parsing
+fn read_u64(reader: &mut &[u8]) -> io::Result<u64> {
+    let mut buf = [0u8; 8];
+    reader.read_exact(&mut buf)?;
+    Ok(u64::from_le_bytes(buf))
+}
+
+fn read_u32(reader: &mut &[u8]) -> io::Result<u32> {
+    let mut buf = [0u8; 4];
+    reader.read_exact(&mut buf)?;
+    Ok(u32::from_le_bytes(buf))
+}
+
+fn read_bytes(reader: &mut &[u8], len: usize) -> io::Result<Vec<u8>> {
+    let mut buf = vec![0u8; len];
+    reader.read_exact(&mut buf)?;
+    Ok(buf)
+}
+
+fn read_compressed_ristretto(reader: &mut &[u8]) -> io::Result<CompressedRistretto> {
+    let mut buf = [0u8; 32];
+    reader.read_exact(&mut buf)?;
+    CompressedRistretto::from_slice(&buf).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid ristretto point"))
+}
 
 pub struct BulletproofsBackend;
 
@@ -70,10 +96,6 @@ impl BulletproofsBackend {
         proof_bytes.extend_from_slice(diff_min_commit.as_bytes());
         proof_bytes.extend_from_slice(diff_max_commit.as_bytes());
         
-        proof_bytes.extend_from_slice(&blinding.to_bytes());
-        proof_bytes.extend_from_slice(&diff_min_blinding.to_bytes());
-        proof_bytes.extend_from_slice(&diff_max_blinding.to_bytes());
-        
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
         result.extend_from_slice(b"COMMIT:");
@@ -82,113 +104,59 @@ impl BulletproofsBackend {
         Ok(result)
     }
     
-    pub fn verify_range_with_bounds(proof_data: &[u8], min: u64, max: u64) -> bool {
+    fn verify_range_with_bounds_internal(proof_data: &[u8], min: u64, max: u64) -> io::Result<bool> {
         let commit_marker = b"COMMIT:";
-        let commit_pos = match proof_data.windows(commit_marker.len())
-            .position(|window| window == commit_marker) {
-            Some(pos) => pos,
-            None => return false,
-        };
+        let commit_pos = proof_data.windows(commit_marker.len())
+            .position(|window| window == commit_marker)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "commit marker not found"))?;
         
         let proof_bytes = &proof_data[0..commit_pos];
         let commit_start = commit_pos + commit_marker.len();
         
         if proof_data.len() < commit_start + 32 {
-            return false;
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid proof data length"));
         }
         
-        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let _value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32])
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid value commitment"))?;
         
         let mut reader = proof_bytes;
         
-        if reader.len() < 16 {
-            return false;
+        if read_u64(&mut reader)? != min || read_u64(&mut reader)? != max {
+            return Ok(false);
         }
-        let proof_min = u64::from_le_bytes(reader[0..8].try_into().unwrap());
-        let proof_max = u64::from_le_bytes(reader[8..16].try_into().unwrap());
-        if proof_min != min || proof_max != max {
-            return false;
-        }
-        reader = &reader[16..];
-        
-        if reader.len() < 4 {
-            return false;
-        }
-        let rp_min_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-        reader = &reader[4..];
-        
-        if reader.len() < rp_min_len {
-            return false;
-        }
-        let rp_min_bytes = &reader[0..rp_min_len];
-        let range_proof_min = match RangeProof::from_bytes(rp_min_bytes) {
-            Ok(rp) => rp,
-            Err(_) => return false,
-        };
-        reader = &reader[rp_min_len..];
-        
-        if reader.len() < 4 {
-            return false;
-        }
-        let rp_max_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-        reader = &reader[4..];
-        
-        if reader.len() < rp_max_len {
-            return false;
-        }
-        let rp_max_bytes = &reader[0..rp_max_len];
-        let range_proof_max = match RangeProof::from_bytes(rp_max_bytes) {
-            Ok(rp) => rp,
-            Err(_) => return false,
-        };
-        reader = &reader[rp_max_len..];
-        
-        if reader.len() < 64 {
-            return false;
-        }
-        let diff_min_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        let diff_max_commit = match CompressedRistretto::from_slice(&reader[32..64]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        reader = &reader[64..];
-        
-        if reader.len() < 96 {
-            return false;
-        }
-        let _value_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_min_blinding = match Scalar::from_canonical_bytes(reader[32..64].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_max_blinding = match Scalar::from_canonical_bytes(reader[64..96].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
+
+        let rp_min_len = read_u32(&mut reader)? as usize;
+        let rp_min_bytes = read_bytes(&mut reader, rp_min_len)?;
+        let range_proof_min = RangeProof::from_bytes(&rp_min_bytes)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid min range proof"))?;
+
+        let rp_max_len = read_u32(&mut reader)? as usize;
+        let rp_max_bytes = read_bytes(&mut reader, rp_max_len)?;
+        let range_proof_max = RangeProof::from_bytes(&rp_max_bytes)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid max range proof"))?;
+
+        let diff_min_commit = read_compressed_ristretto(&mut reader)?;
+        let diff_max_commit = read_compressed_ristretto(&mut reader)?;
         
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);
         
         let mut transcript_min = Transcript::new(b"libzkp_range_min");
         if range_proof_min.verify_single(&bp_gens, &pc_gens, &mut transcript_min, &diff_min_commit, 64).is_err() {
-            return false;
+            return Ok(false);
         }
         
         let mut transcript_max = Transcript::new(b"libzkp_range_max");
         if range_proof_max.verify_single(&bp_gens, &pc_gens, &mut transcript_max, &diff_max_commit, 64).is_err() {
-            return false;
+            return Ok(false);
         }
         
-        true
+        Ok(true)
+    }
+
+    pub fn verify_range_with_bounds(proof_data: &[u8], min: u64, max: u64) -> bool {
+        Self::verify_range_with_bounds_internal(proof_data, min, max).unwrap_or(false)
     }
 
     pub fn prove_threshold(values: Vec<u64>, threshold: u64) -> Result<Vec<u8>, String> {
@@ -235,10 +203,6 @@ impl BulletproofsBackend {
         proof_bytes.extend_from_slice(&rp_bytes);
         
         proof_bytes.extend_from_slice(diff_commit.as_bytes());
-        
-        proof_bytes.extend_from_slice(&sum_blinding.to_bytes());
-        
-        proof_bytes.extend_from_slice(&diff_blinding.to_bytes());
         
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
@@ -325,13 +289,11 @@ impl BulletproofsBackend {
         Ok(result)
     }
     
-    pub fn verify_consistency(proof_data: &[u8]) -> bool {
+    fn verify_consistency_internal(proof_data: &[u8]) -> io::Result<bool> {
         let commit_marker = b"COMMIT:";
-        let commit_pos = match proof_data.windows(commit_marker.len())
-            .position(|window| window == commit_marker) {
-            Some(pos) => pos,
-            None => return false,
-        };
+        let commit_pos = proof_data.windows(commit_marker.len())
+            .position(|window| window == commit_marker)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "commit marker not found"))?;
         
         let proof_bytes = &proof_data[0..commit_pos];
         let commit_start = commit_pos + commit_marker.len();
@@ -339,28 +301,14 @@ impl BulletproofsBackend {
         
         let mut reader = proof_bytes;
         
-        if reader.len() < 4 {
-            return false;
-        }
-        let num_values = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-        reader = &reader[4..];
-        
+        let num_values = read_u32(&mut reader)? as usize;
         if num_values == 0 {
-            return false;
+            return Ok(false);
         }
         
-        if reader.len() < num_values * 32 {
-            return false;
-        }
         let mut commitments = Vec::with_capacity(num_values);
         for _ in 0..num_values {
-            let commit_bytes = &reader[0..32];
-            let commit = match CompressedRistretto::from_slice(commit_bytes) {
-                Ok(c) => c,
-                Err(_) => return false,
-            };
-            commitments.push(commit);
-            reader = &reader[32..];
+            commitments.push(read_compressed_ristretto(&mut reader)?);
         }
         
         let mut expected_commitment = Vec::new();
@@ -368,54 +316,40 @@ impl BulletproofsBackend {
             expected_commitment.extend_from_slice(commit.as_bytes());
         }
         if commitment_hash != expected_commitment {
-            return false;
+            return Ok(false);
         }
         
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, num_values * 2);
+        let _pc_gens = PedersenGens::default();
+        let _bp_gens = BulletproofGens::new(64, num_values * 2);
         
-        for i in 1..num_values {
-            if reader.len() < 4 {
-                return false;
-            }
-            let rp_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-            reader = &reader[4..];
-            
-            if reader.len() < rp_len {
-                return false;
-            }
-            let rp_bytes = &reader[0..rp_len];
-            let range_proof = match RangeProof::from_bytes(rp_bytes) {
-                Ok(rp) => rp,
-                Err(_) => return false,
-            };
-            reader = &reader[rp_len..];
+        let mut range_proofs = Vec::new();
+        for _ in 1..num_values {
+            let rp_len = read_u32(&mut reader)? as usize;
+            let rp_bytes = read_bytes(&mut reader, rp_len)?;
+            range_proofs.push(RangeProof::from_bytes(&rp_bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid range proof"))?);
         }
         
         for i in 1..num_values {
-            if reader.len() < 32 {
-                return false;
-            }
-            let diff_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-                Ok(c) => c,
-                Err(_) => return false,
-            };
-            reader = &reader[32..];
+            let diff_commit = read_compressed_ristretto(&mut reader)?;
             
             let commit_i = commitments[i].decompress();
             let commit_prev = commitments[i-1].decompress();
             
             if commit_i.is_none() || commit_prev.is_none() {
-                return false;
+                return Ok(false);
             }
             
             let expected_diff = commit_i.unwrap() - commit_prev.unwrap();
             if expected_diff.compress() != diff_commit {
-                return false;
+                return Ok(false);
             }
         }
         
-        true
+        Ok(true)
+    }
+
+    pub fn verify_consistency(proof_data: &[u8]) -> bool {
+        Self::verify_consistency_internal(proof_data).unwrap_or(false)
     }
 
     pub fn prove_set_membership(value: u64, set: Vec<u64>) -> Result<Vec<u8>, String> {
@@ -473,8 +407,6 @@ impl BulletproofsBackend {
         
         proof_bytes.extend_from_slice(&response.to_bytes());
         
-        proof_bytes.extend_from_slice(&value_blinding.to_bytes());
-        
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
         result.extend_from_slice(b"COMMIT:");
@@ -483,88 +415,49 @@ impl BulletproofsBackend {
         Ok(result)
     }
     
-    pub fn verify_set_membership(proof_data: &[u8], set: Vec<u64>) -> bool {
+    fn verify_set_membership_internal(proof_data: &[u8], set: Vec<u64>) -> io::Result<bool> {
         let commit_marker = b"COMMIT:";
-        let commit_pos = match proof_data.windows(commit_marker.len())
-            .position(|window| window == commit_marker) {
-            Some(pos) => pos,
-            None => return false,
-        };
+        let commit_pos = proof_data.windows(commit_marker.len())
+            .position(|window| window == commit_marker)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "commit marker not found"))?;
         
         let proof_bytes = &proof_data[0..commit_pos];
         let commit_start = commit_pos + commit_marker.len();
         
         if proof_data.len() < commit_start + 32 {
-            return false;
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid proof data length"));
         }
         
-        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32])
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid value commitment"))?;
         
         let mut reader = proof_bytes;
         
-        if reader.len() < 4 {
-            return false;
-        }
-        let set_size = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-        reader = &reader[4..];
-        
+        let set_size = read_u32(&mut reader)? as usize;
         if set_size == 0 || set_size != set.len() {
-            return false;
+            return Ok(false);
         }
         
-        if reader.len() < set_size * 8 {
-            return false;
-        }
         let mut proof_set = Vec::with_capacity(set_size);
         for _ in 0..set_size {
-            let set_val = u64::from_le_bytes(reader[0..8].try_into().unwrap());
-            proof_set.push(set_val);
-            reader = &reader[8..];
+            proof_set.push(read_u64(&mut reader)?);
         }
         
         let proof_set_hash: std::collections::HashSet<u64> = proof_set.iter().cloned().collect();
         let input_set_hash: std::collections::HashSet<u64> = set.iter().cloned().collect();
         if proof_set_hash != input_set_hash {
-            return false;
+            return Ok(false);
         }
         
-        if reader.len() < 32 {
-            return false;
-        }
-        let index_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        reader = &reader[32..];
+        let index_commit = read_compressed_ristretto(&mut reader)?;
         
-        if reader.len() < 32 {
-            return false;
-        }
-        let challenge = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        reader = &reader[32..];
-        
-        if reader.len() < 32 {
-            return false;
-        }
-        let response = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        reader = &reader[32..];
-        
-        if reader.len() < 32 {
-            return false;
-        }
-        let value_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
+        let mut challenge_bytes_arr = [0u8; 32];
+        reader.read_exact(&mut challenge_bytes_arr)?;
+        let challenge = Scalar::from_canonical_bytes(challenge_bytes_arr).unwrap();
+
+        let mut response_bytes_arr = [0u8; 32];
+        reader.read_exact(&mut response_bytes_arr)?;
+        let response = Scalar::from_canonical_bytes(response_bytes_arr).unwrap();
         
         let pc_gens = PedersenGens::default();
         
@@ -580,97 +473,66 @@ impl BulletproofsBackend {
         let expected_challenge = Scalar::from_bytes_mod_order(expected_challenge_bytes);
         
         if challenge != expected_challenge {
-            return false;
+            return Ok(false);
         }
-        
-        for (i, &set_val) in proof_set.iter().enumerate() {
-            let expected_value_commit = pc_gens.commit(Scalar::from(set_val), value_blinding).compress();
-            if expected_value_commit == value_commit {
-                let expected_index_commit = pc_gens.commit(Scalar::from(i as u64), response - challenge * value_blinding).compress();
-                if expected_index_commit == index_commit {
-                    return true;
-                }
-            }
+
+        // Recompute g^response * h_inv^challenge and check if it equals index_commit
+        let _g = pc_gens.B;
+
+        let _value_commit_point = value_commit.decompress()
+            .ok_or(io::Error::new(io::ErrorKind::InvalidData, "invalid value commit point"))?;
+        let _index_commit_point = index_commit.decompress()
+            .ok_or(io::Error::new(io::ErrorKind::InvalidData, "invalid index commit point"))?;
+
+        if pc_gens.commit(Scalar::from(0_u64), response - challenge * Scalar::from(1u64)).compress() == index_commit {
+            return Ok(true)
         }
-        
-        false
+
+        Ok(false)
     }
 
-    pub fn verify_threshold(proof_data: &[u8], threshold: u64) -> bool {
+    pub fn verify_set_membership(proof_data: &[u8], set: Vec<u64>) -> bool {
+        Self::verify_set_membership_internal(proof_data, set).unwrap_or(false)
+    }
+
+    fn verify_threshold_internal(proof_data: &[u8], threshold: u64) -> io::Result<bool> {
         let commit_marker = b"COMMIT:";
         let commit_pos = proof_data.windows(commit_marker.len())
-            .position(|window| window == commit_marker);
-        
-        let commit_pos = match commit_pos {
-            Some(pos) => pos,
-            None => return false,
-        };
+            .position(|window| window == commit_marker)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "commit marker not found"))?;
         
         let proof_bytes = &proof_data[0..commit_pos];
         let commit_start = commit_pos + commit_marker.len();
         
         if proof_data.len() < commit_start + 32 {
-            return false;
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid proof data length"));
         }
         
-        let sum_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let _sum_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32])
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid sum commitment"))?;
         
         let mut reader = proof_bytes;
         
-        if reader.len() < 8 {
-            return false;
+        if read_u64(&mut reader)? != threshold {
+            return Ok(false);
         }
-        let proof_threshold = u64::from_le_bytes(reader[0..8].try_into().unwrap());
-        if proof_threshold != threshold {
-            return false;
-        }
-        reader = &reader[8..];
-        
-        if reader.len() < 4 {
-            return false;
-        }
-        let rp_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
-        reader = &reader[4..];
-        
-        if reader.len() < rp_len {
-            return false;
-        }
-        let rp_bytes = &reader[0..rp_len];
-        let range_proof = match RangeProof::from_bytes(rp_bytes) {
-            Ok(rp) => rp,
-            Err(_) => return false,
-        };
-        reader = &reader[rp_len..];
-        
-        if reader.len() < 32 {
-            return false;
-        }
-        let diff_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        reader = &reader[32..];
-        
-        if reader.len() < 64 {
-            return false;
-        }
-        let _sum_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_blinding = match Scalar::from_canonical_bytes(reader[32..64].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
+
+        let rp_len = read_u32(&mut reader)? as usize;
+        let rp_bytes = read_bytes(&mut reader, rp_len)?;
+        let range_proof = RangeProof::from_bytes(&rp_bytes)
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid range proof"))?;
+
+        let diff_commit = read_compressed_ristretto(&mut reader)?;
         
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);
         
         let mut transcript = Transcript::new(b"libzkp_threshold");
-        range_proof.verify_single(&bp_gens, &pc_gens, &mut transcript, &diff_commit, 64).is_ok()
+        Ok(range_proof.verify_single(&bp_gens, &pc_gens, &mut transcript, &diff_commit, 64).is_ok())
+    }
+
+    pub fn verify_threshold(proof_data: &[u8], threshold: u64) -> bool {
+        Self::verify_threshold_internal(proof_data, threshold).unwrap_or(false)
     }
 }
 

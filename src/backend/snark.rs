@@ -54,7 +54,7 @@ impl ConstraintSynthesizer<Fr> for EqualityCircuit {
 pub struct SnarkBackend;
 
 impl SnarkBackend {
-    fn generate_universal_setup() -> (ark_groth16::ProvingKey<Bn254>, ark_groth16::VerifyingKey<Bn254>) {
+    fn generate_universal_setup() -> Result<(ark_groth16::ProvingKey<Bn254>, ark_groth16::VerifyingKey<Bn254>), SynthesisError> {
         let rng = &mut OsRng;
         let dummy_circuit = EqualityCircuit {
             a: Some(Fr::from(0u64)),
@@ -64,14 +64,18 @@ impl SnarkBackend {
             blinding_a: Some(Fr::from(0u64)),
             blinding_b: Some(Fr::from(0u64)),
         };
-        Groth16::<Bn254>::circuit_specific_setup(dummy_circuit, rng).expect("setup failed")
+        Groth16::<Bn254>::circuit_specific_setup(dummy_circuit, rng)
     }
     
-    pub fn prove_equality_zk(a: u64, b: u64, blinding_a: Fr, blinding_b: Fr) -> Vec<u8> {
+    pub fn prove_equality_zk(a: u64, b: u64) -> Result<Vec<u8>, String> {
         if a != b {
-            return vec![];
+            return Err("values are not equal".to_string());
         }
         
+        let rng = &mut OsRng;
+        let blinding_a = Fr::rand(rng);
+        let blinding_b = Fr::rand(rng);
+
         let commit_a = Fr::from(a) + blinding_a;
         let commit_b = Fr::from(b) + blinding_b;
         
@@ -84,16 +88,16 @@ impl SnarkBackend {
             blinding_b: Some(blinding_b),
         };
         
-        let (pk, vk) = Self::generate_universal_setup();
+        let (pk, vk) = Self::generate_universal_setup().map_err(|e| e.to_string())?;
         let rng = &mut OsRng;
-        let proof = Groth16::<Bn254>::prove(&pk, circuit, rng).expect("proof generation failed");
+        let proof = Groth16::<Bn254>::prove(&pk, circuit, rng).map_err(|e| e.to_string())?;
         
         let mut bytes = Vec::new();
-        vk.serialize_uncompressed(&mut bytes).expect("serialize vk");
-        proof.serialize_uncompressed(&mut bytes).expect("serialize proof");
-        commit_a.serialize_uncompressed(&mut bytes).expect("serialize commit_a");
-        commit_b.serialize_uncompressed(&mut bytes).expect("serialize commit_b");
-        bytes
+        vk.serialize_uncompressed(&mut bytes).map_err(|e| e.to_string())?;
+        proof.serialize_uncompressed(&mut bytes).map_err(|e| e.to_string())?;
+        commit_a.serialize_uncompressed(&mut bytes).map_err(|e| e.to_string())?;
+        commit_b.serialize_uncompressed(&mut bytes).map_err(|e| e.to_string())?;
+        Ok(bytes)
     }
     
     pub fn verify_equality_zk(proof_data: &[u8]) -> bool {
@@ -133,11 +137,10 @@ impl ZkpBackend for SnarkBackend {
         let a = u64::from_le_bytes(data[0..8].try_into().unwrap());
         let b = u64::from_le_bytes(data[8..16].try_into().unwrap());
         
-        let rng = &mut OsRng;
-        let blinding_a = Fr::rand(rng);
-        let blinding_b = Fr::rand(rng);
-        
-        Self::prove_equality_zk(a, b, blinding_a, blinding_b)
+        match Self::prove_equality_zk(a, b) {
+            Ok(proof) => proof,
+            Err(_) => vec![],
+        }
     }
 
     fn verify(proof: &[u8], _data: &[u8]) -> bool {
