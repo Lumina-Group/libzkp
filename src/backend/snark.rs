@@ -2,7 +2,7 @@ use super::ZkpBackend;
 use ark_bn254::{Bn254, Fr};
 use ark_crypto_primitives::crh::{sha256::constraints::{Sha256Gadget, UnitVar}, CRHSchemeGadget};
 use ark_ff::PrimeField;
-use ark_groth16::{Groth16, VerifyingKey};
+use ark_groth16::Groth16;
 use ark_r1cs_std::prelude::*;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
