@@ -37,7 +37,7 @@ where
     let mut registry = BATCH_REGISTRY.lock().unwrap();
     let batch = registry
         .get_mut(&batch_id)
-        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)).into())?;
+        .ok_or_else(|| PyErr::from(ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id))))?;
     f(batch);
     Ok(())
 }
