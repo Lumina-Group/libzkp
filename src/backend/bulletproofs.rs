@@ -453,11 +453,13 @@ impl BulletproofsBackend {
         
         let mut challenge_bytes_arr = [0u8; 32];
         reader.read_exact(&mut challenge_bytes_arr)?;
-        let challenge = Scalar::from_canonical_bytes(challenge_bytes_arr).unwrap();
+        let challenge = Scalar::from_canonical_bytes(challenge_bytes_arr)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid challenge scalar"))?;
 
         let mut response_bytes_arr = [0u8; 32];
         reader.read_exact(&mut response_bytes_arr)?;
-        let response = Scalar::from_canonical_bytes(response_bytes_arr).unwrap();
+        let response = Scalar::from_canonical_bytes(response_bytes_arr)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid response scalar"))?;
         
         let pc_gens = PedersenGens::default();
         
