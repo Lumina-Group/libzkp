@@ -124,9 +124,9 @@ impl StarkBackend {
         
         // Linear interpolation from old to new value
         for i in 0..trace_length {
-            let progress = i as f64 / (trace_length - 1) as f64;
-            let value = old as f64 + (new as f64 - old as f64) * progress;
-            trace.set(0, i, BaseElement::new(value as u128));
+            // Use integer arithmetic to avoid floating-point inaccuracies.
+            let value = old as u128 + ((new as u128 - old as u128) * i as u128) / ((trace_length - 1) as u128);
+            trace.set(0, i, BaseElement::new(value));
         }
 
         // Build the proof
