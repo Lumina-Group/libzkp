@@ -6,6 +6,14 @@ use crate::utils::{
 };
 use crate::proof::Proof;
 use std::collections::HashMap;
+use std::sync::Mutex;
+use lazy_static::lazy_static;
+use crate::utils::composition::{ProofBatch, BatchOperation};
+
+lazy_static! {
+    static ref BATCH_REGISTRY: Mutex<HashMap<usize, ProofBatch>> = Mutex::new(HashMap::new());
+    static ref BATCH_COUNTER: Mutex<usize> = Mutex::new(0);
+}
 
 /// Create a composite proof from multiple individual proofs
 #[pyfunction]
@@ -36,34 +44,170 @@ pub fn verify_composite_proof(composite_bytes: Vec<u8>) -> PyResult<bool> {
     Ok(composite.verify_integrity())
 }
 
-/// Create a proof batch for improved performance
+/// Create a new proof batch
 #[pyfunction]
 pub fn create_proof_batch() -> PyResult<usize> {
-    // Return a batch ID (simplified implementation)
-    // In a real implementation, this would store the batch in a global registry
-    Ok(0)
+    let mut counter = BATCH_COUNTER.lock().unwrap();
+    let batch_id = *counter;
+    *counter += 1;
+    
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    registry.insert(batch_id, ProofBatch::new());
+    
+    Ok(batch_id)
 }
 
 /// Add range proof to batch
 #[pyfunction]
 pub fn batch_add_range_proof(
-    _batch_id: usize,
-    _value: u64,
+    batch_id: usize,
+    value: u64,
     min: u64,
     max: u64,
 ) -> PyResult<()> {
-    // Simplified implementation - would add to actual batch
-    if min > max {
-        return Err(ZkpError::InvalidInput("invalid range".to_string()).into());
+    // Validate inputs
+    crate::utils::validation::validate_range_params(value, min, max)
+        .map_err(|e| PyErr::from(e))?;
+    
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let batch = registry.get_mut(&batch_id)
+        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
+    
+    batch.add_range_proof(value, min, max);
+    Ok(())
+}
+
+/// Add equality proof to batch
+#[pyfunction]
+pub fn batch_add_equality_proof(
+    batch_id: usize,
+    val1: u64,
+    val2: u64,
+) -> PyResult<()> {
+    if val1 != val2 {
+        return Err(ZkpError::InvalidInput("values must be equal".to_string()).into());
     }
+    
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let batch = registry.get_mut(&batch_id)
+        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
+    
+    batch.add_equality_proof(val1, val2);
+    Ok(())
+}
+
+/// Add threshold proof to batch
+#[pyfunction]
+pub fn batch_add_threshold_proof(
+    batch_id: usize,
+    values: Vec<u64>,
+    threshold: u64,
+) -> PyResult<()> {
+    // Validate inputs
+    crate::utils::validation::validate_threshold_params(&values, threshold)
+        .map_err(|e| PyErr::from(e))?;
+    
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let batch = registry.get_mut(&batch_id)
+        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
+    
+    batch.add_threshold_proof(values, threshold);
     Ok(())
 }
 
 /// Process batch and return all proofs
 #[pyfunction]
-pub fn process_batch(_batch_id: usize) -> PyResult<Vec<Vec<u8>>> {
-    // Simplified implementation - would process actual batch
-    Ok(vec![vec![1, 2, 3, 4]]) // Placeholder
+pub fn process_batch(batch_id: usize) -> PyResult<Vec<Vec<u8>>> {
+    use rayon::prelude::*;
+    
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let batch = registry.remove(&batch_id)
+        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
+    
+    // Process operations in parallel
+    let results: Vec<Result<Vec<u8>, ZkpError>> = batch.operations()
+        .par_iter()
+        .map(|op| process_batch_operation(op))
+        .collect();
+    
+    results.into_iter().collect::<Result<Vec<_>, _>>().map_err(PyErr::from)
+}
+
+/// Get batch status
+#[pyfunction]
+pub fn get_batch_status(batch_id: usize) -> PyResult<HashMap<String, usize>> {
+    let registry = BATCH_REGISTRY.lock().unwrap();
+    let batch = registry.get(&batch_id)
+        .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
+    
+    let mut status = HashMap::new();
+    status.insert("total_operations".to_string(), batch.len());
+    
+    // Count operations by type
+    let mut range_count = 0;
+    let mut equality_count = 0;
+    let mut threshold_count = 0;
+    let mut membership_count = 0;
+    let mut improvement_count = 0;
+    let mut consistency_count = 0;
+    
+    for op in batch.operations() {
+        match op {
+            BatchOperation::RangeProof { .. } => range_count += 1,
+            BatchOperation::EqualityProof { .. } => equality_count += 1,
+            BatchOperation::ThresholdProof { .. } => threshold_count += 1,
+            BatchOperation::MembershipProof { .. } => membership_count += 1,
+            BatchOperation::ImprovementProof { .. } => improvement_count += 1,
+            BatchOperation::ConsistencyProof { .. } => consistency_count += 1,
+        }
+    }
+    
+    status.insert("range_proofs".to_string(), range_count);
+    status.insert("equality_proofs".to_string(), equality_count);
+    status.insert("threshold_proofs".to_string(), threshold_count);
+    status.insert("membership_proofs".to_string(), membership_count);
+    status.insert("improvement_proofs".to_string(), improvement_count);
+    status.insert("consistency_proofs".to_string(), consistency_count);
+    
+    Ok(status)
+}
+
+/// Clear a specific batch
+#[pyfunction]
+pub fn clear_batch(batch_id: usize) -> PyResult<()> {
+    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    registry.remove(&batch_id);
+    Ok(())
+}
+
+/// Helper function to process a single batch operation
+fn process_batch_operation(op: &BatchOperation) -> Result<Vec<u8>, ZkpError> {
+    match op {
+        BatchOperation::RangeProof { value, min, max } => {
+            crate::range_proof::prove_range(*value, *min, *max)
+                .map_err(|_| ZkpError::ProofGenerationFailed("Range proof failed".to_string()))
+        }
+        BatchOperation::EqualityProof { val1, val2 } => {
+            crate::equality_proof::prove_equality(*val1, *val2)
+                .map_err(|_| ZkpError::ProofGenerationFailed("Equality proof failed".to_string()))
+        }
+        BatchOperation::ThresholdProof { values, threshold } => {
+            crate::threshold_proof::prove_threshold(values.clone(), *threshold)
+                .map_err(|_| ZkpError::ProofGenerationFailed("Threshold proof failed".to_string()))
+        }
+        BatchOperation::MembershipProof { value, set } => {
+            crate::set_membership::prove_membership(*value, set.clone())
+                .map_err(|_| ZkpError::ProofGenerationFailed("Membership proof failed".to_string()))
+        }
+        BatchOperation::ImprovementProof { old, new } => {
+            crate::improvement_proof::prove_improvement(*old, *new)
+                .map_err(|_| ZkpError::ProofGenerationFailed("Improvement proof failed".to_string()))
+        }
+        BatchOperation::ConsistencyProof { data } => {
+            crate::consistency_proof::prove_consistency(data.clone())
+                .map_err(|_| ZkpError::ProofGenerationFailed("Consistency proof failed".to_string()))
+        }
+    }
 }
 
 /// Clear the global proof cache

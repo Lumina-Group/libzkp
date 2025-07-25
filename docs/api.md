@@ -1,0 +1,289 @@
+# libzkp API リファレンス
+
+## 目次
+
+1. [基本的な証明関数](#基本的な証明関数)
+2. [高度な機能](#高度な機能)
+3. [バッチ処理](#バッチ処理)
+4. [パフォーマンス機能](#パフォーマンス機能)
+5. [ユーティリティ関数](#ユーティリティ関数)
+6. [エラー型](#エラー型)
+
+## 基本的な証明関数
+
+### 範囲証明 (Range Proof)
+
+#### `prove_range(value: int, min: int, max: int) -> bytes`
+指定された値が範囲内にあることを証明する証明を生成します。
+
+**パラメータ:**
+- `value`: 証明する値
+- `min`: 範囲の最小値（含む）
+- `max`: 範囲の最大値（含む）
+
+**戻り値:** 証明データ（バイト列）
+
+**例外:**
+- `ValueError`: 値が範囲外の場合、または min > max の場合
+
+**例:**
+```python
+proof = libzkp.prove_range(25, 18, 65)
+```
+
+#### `verify_range(proof: bytes, min: int, max: int) -> bool`
+範囲証明を検証します。
+
+**パラメータ:**
+- `proof`: 証明データ
+- `min`: 範囲の最小値
+- `max`: 範囲の最大値
+
+**戻り値:** 証明が有効な場合 True、無効な場合 False
+
+### 等価性証明 (Equality Proof)
+
+#### `prove_equality(val1: int, val2: int) -> bytes`
+2つの値が等しいことを証明する証明を生成します。
+
+**パラメータ:**
+- `val1`: 最初の値
+- `val2`: 2番目の値
+
+**戻り値:** 証明データ（バイト列）
+
+**例外:**
+- `ValueError`: val1 != val2 の場合
+
+#### `verify_equality(proof: bytes, commitment: bytes) -> bool`
+等価性証明を検証します。
+
+**パラメータ:**
+- `proof`: 証明データ
+- `commitment`: 期待されるコミットメント（SHA256ハッシュ）
+
+**戻り値:** 証明が有効な場合 True
+
+### しきい値証明 (Threshold Proof)
+
+#### `prove_threshold(values: List[int], threshold: int) -> bytes`
+値の合計が閾値以上であることを証明します。
+
+**パラメータ:**
+- `values`: 値のリスト
+- `threshold`: 閾値
+
+**戻り値:** 証明データ
+
+**例外:**
+- `ValueError`: 合計が閾値未満の場合
+- `OverflowError`: 整数オーバーフローが発生した場合
+
+#### `verify_threshold(proof: bytes, threshold: int) -> bool`
+しきい値証明を検証します。
+
+### 集合所属証明 (Set Membership Proof)
+
+#### `prove_membership(value: int, set: List[int]) -> bytes`
+値が集合に含まれることを証明します。
+
+**パラメータ:**
+- `value`: 証明する値
+- `set`: 値の集合
+
+**戻り値:** 証明データ
+
+**例外:**
+- `ValueError`: 値が集合に含まれない場合
+
+#### `verify_membership(proof: bytes, set: List[int]) -> bool`
+集合所属証明を検証します。
+
+### 向上証明 (Improvement Proof)
+
+#### `prove_improvement(old: int, new: int) -> bytes`
+値が増加したことを証明します（STARKバックエンド使用）。
+
+**パラメータ:**
+- `old`: 古い値
+- `new`: 新しい値
+
+**戻り値:** 証明データ
+
+**例外:**
+- `ValueError`: new <= old の場合
+
+#### `verify_improvement(proof: bytes, old: int) -> bool`
+向上証明を検証します。
+
+### 整合性証明 (Consistency Proof)
+
+#### `prove_consistency(data: List[int]) -> bytes`
+データが昇順に並んでいることを証明します。
+
+**パラメータ:**
+- `data`: 整数のリスト
+
+**戻り値:** 証明データ
+
+**例外:**
+- `ValueError`: データが昇順でない場合、または空の場合
+
+#### `verify_consistency(proof: bytes) -> bool`
+整合性証明を検証します。
+
+## 高度な機能
+
+### 複合証明
+
+#### `create_composite_proof(proofs: List[bytes]) -> bytes`
+複数の証明を組み合わせて複合証明を作成します。
+
+**パラメータ:**
+- `proofs`: 証明のリスト
+
+**戻り値:** 複合証明データ
+
+#### `verify_composite_proof(composite_proof: bytes) -> bool`
+複合証明を検証します。
+
+### メタデータ付き証明
+
+#### `create_proof_with_metadata(proof: bytes, metadata: Dict[str, bytes]) -> bytes`
+証明にメタデータを付加します。
+
+**パラメータ:**
+- `proof`: 元の証明データ
+- `metadata`: メタデータの辞書（キーは文字列、値はバイト列）
+
+**戻り値:** メタデータ付き証明
+
+#### `extract_proof_metadata(proof_with_metadata: bytes) -> Dict[str, bytes]`
+証明からメタデータを抽出します。
+
+## バッチ処理
+
+### バッチ管理
+
+#### `create_proof_batch() -> int`
+新しい証明バッチを作成します。
+
+**戻り値:** バッチID
+
+#### `get_batch_status(batch_id: int) -> Dict[str, int]`
+バッチの状態を取得します。
+
+**戻り値:** 状態情報の辞書
+- `total_operations`: 総操作数
+- `range_proofs`: 範囲証明の数
+- `equality_proofs`: 等価性証明の数
+- `threshold_proofs`: しきい値証明の数
+- `membership_proofs`: 集合所属証明の数
+- `improvement_proofs`: 向上証明の数
+- `consistency_proofs`: 整合性証明の数
+
+#### `clear_batch(batch_id: int) -> None`
+指定されたバッチをクリアします。
+
+### バッチへの証明追加
+
+#### `batch_add_range_proof(batch_id: int, value: int, min: int, max: int) -> None`
+範囲証明をバッチに追加します。
+
+#### `batch_add_equality_proof(batch_id: int, val1: int, val2: int) -> None`
+等価性証明をバッチに追加します。
+
+#### `batch_add_threshold_proof(batch_id: int, values: List[int], threshold: int) -> None`
+しきい値証明をバッチに追加します。
+
+### バッチ処理
+
+#### `process_batch(batch_id: int) -> List[bytes]`
+バッチ内の全ての証明を並列で生成します。
+
+**戻り値:** 生成された証明のリスト
+
+**例外:**
+- `ValueError`: 無効なバッチIDの場合
+- `RuntimeError`: 証明生成に失敗した場合
+
+## パフォーマンス機能
+
+### キャッシング
+
+#### `prove_range_cached(value: int, min: int, max: int) -> bytes`
+キャッシュを使用した範囲証明の生成。
+
+#### `clear_cache() -> None`
+グローバル証明キャッシュをクリアします。
+
+#### `get_cache_stats() -> Dict[str, int]`
+キャッシュの統計情報を取得します。
+
+### パフォーマンス監視
+
+#### `enable_performance_monitoring(enabled: bool) -> None`
+パフォーマンス監視を有効/無効にします。
+
+#### `get_performance_metrics() -> Dict[str, float]`
+パフォーマンスメトリクスを取得します。
+
+#### `benchmark_proof_generation(proof_type: str, iterations: int) -> Dict[str, float]`
+証明生成のベンチマークを実行します。
+
+**パラメータ:**
+- `proof_type`: "range" または "equality"
+- `iterations`: 繰り返し回数
+
+**戻り値:**
+- `total_time_ms`: 総実行時間（ミリ秒）
+- `average_time_ms`: 平均実行時間（ミリ秒）
+- `proofs_per_second`: 1秒あたりの証明生成数
+
+### 並列処理
+
+#### `verify_proofs_parallel(proofs: List[Tuple[bytes, str]]) -> List[bool]`
+複数の証明を並列で検証します。
+
+**パラメータ:**
+- `proofs`: (証明データ, 証明タイプ) のタプルのリスト
+  - 証明タイプ: "range", "equality", "threshold", "membership", "improvement", "consistency"
+
+**戻り値:** 各証明の検証結果のリスト
+
+## ユーティリティ関数
+
+### 証明情報
+
+#### `get_proof_info(proof: bytes) -> Dict[str, Any]`
+証明の詳細情報を取得します。
+
+**戻り値:**
+- `version`: 証明のバージョン
+- `scheme`: 証明スキームID
+- `size`: 証明サイズ（バイト）
+- `commitment_size`: コミットメントサイズ
+
+### 証明チェーン検証
+
+#### `validate_proof_chain(proofs: List[bytes]) -> bool`
+証明チェーンの整合性を検証します。
+
+### 最適化された証明生成
+
+#### `prove_equality_advanced(val1: int, val2: int, context: Optional[bytes]) -> bytes`
+コンテキスト付きの高度な等価性証明を生成します。
+
+#### `prove_threshold_optimized(values: List[int], threshold: int) -> bytes`
+最適化されたしきい値証明を生成します。
+
+## エラー型
+
+libzkpは以下のPython例外を発生させる可能性があります：
+
+- `ValueError`: 無効な入力パラメータ
+- `OverflowError`: 整数オーバーフロー
+- `TypeError`: 無効な証明フォーマット
+- `RuntimeError`: バックエンドエラー、証明生成失敗など
+
+各関数は適切なエラーメッセージと共に例外を発生させます。

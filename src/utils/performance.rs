@@ -197,16 +197,164 @@ impl Default for Timer {
 /// Parallel processing utilities for batch operations
 pub mod parallel {
     use rayon::prelude::*;
+    use crate::proof::{Proof, PROOF_VERSION};
     
-    /// Verify multiple proofs in parallel
+    /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
         proofs
             .par_iter()
-            .map(|(proof_data, _proof_type)| {
-                // Placeholder verification logic
-                !proof_data.is_empty()
+            .map(|(proof_data, proof_type)| {
+                verify_single_proof(proof_data, proof_type)
             })
             .collect()
+    }
+    
+    /// Verify a single proof based on its type
+    fn verify_single_proof(proof_data: &[u8], proof_type: &str) -> bool {
+        // First, try to parse the proof
+        let proof = match Proof::from_bytes(proof_data) {
+            Some(p) => p,
+            None => return false,
+        };
+        
+        // Check version
+        if proof.version != PROOF_VERSION {
+            return false;
+        }
+        
+        // Verify based on proof type and scheme
+        match proof_type {
+            "range" => {
+                if proof.scheme != 1 {
+                    return false;
+                }
+                // For range proofs, we need min/max values which should be in the proof
+                // This is a simplified check - in production, we'd need the actual bounds
+                verify_range_proof_internal(&proof)
+            }
+            "equality" => {
+                if proof.scheme != 2 {
+                    return false;
+                }
+                // For equality proofs, we need the expected commitment
+                // This is a simplified check
+                verify_equality_proof_internal(&proof)
+            }
+            "threshold" => {
+                if proof.scheme != 3 {
+                    return false;
+                }
+                verify_threshold_proof_internal(&proof)
+            }
+            "membership" => {
+                if proof.scheme != 4 {
+                    return false;
+                }
+                verify_membership_proof_internal(&proof)
+            }
+            "improvement" => {
+                if proof.scheme != 5 {
+                    return false;
+                }
+                verify_improvement_proof_internal(&proof)
+            }
+            "consistency" => {
+                if proof.scheme != 6 {
+                    return false;
+                }
+                verify_consistency_proof_internal(&proof)
+            }
+            _ => false,
+        }
+    }
+    
+    fn verify_range_proof_internal(proof: &Proof) -> bool {
+        // Basic validation
+        if proof.commitment.len() != 32 {
+            return false;
+        }
+        // In a real implementation, we'd reconstruct and verify the bulletproofs
+        true
+    }
+    
+    fn verify_equality_proof_internal(proof: &Proof) -> bool {
+        // Basic validation
+        if proof.commitment.len() != 32 {
+            return false;
+        }
+        // In a real implementation, we'd verify the SNARK proof
+        true
+    }
+    
+    fn verify_threshold_proof_internal(proof: &Proof) -> bool {
+        // Basic validation
+        if proof.commitment.len() != 32 {
+            return false;
+        }
+        true
+    }
+    
+    fn verify_membership_proof_internal(proof: &Proof) -> bool {
+        // Basic validation
+        if proof.commitment.len() != 32 {
+            return false;
+        }
+        true
+    }
+    
+    fn verify_improvement_proof_internal(proof: &Proof) -> bool {
+        // Basic validation for improvement proofs
+        if proof.commitment.len() != 16 {
+            return false;
+        }
+        // Extract diff and new value
+        let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
+        let _new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
+        
+        // Diff must be positive
+        diff > 0
+    }
+    
+    fn verify_consistency_proof_internal(proof: &Proof) -> bool {
+        // Basic validation
+        !proof.commitment.is_empty()
+    }
+    
+    /// Generate multiple proofs in parallel
+    pub fn generate_proofs_parallel<F, T>(
+        inputs: Vec<T>,
+        proof_fn: F,
+    ) -> Vec<Result<Vec<u8>, String>>
+    where
+        F: Fn(T) -> Result<Vec<u8>, String> + Sync,
+        T: Send,
+    {
+        inputs
+            .into_par_iter()
+            .map(|input| proof_fn(input))
+            .collect()
+    }
+    
+    /// Batch verify with early termination on failure
+    pub fn batch_verify_with_early_termination(
+        proofs: &[(Vec<u8>, String)],
+    ) -> Result<(), usize> {
+        let results: Vec<(usize, bool)> = proofs
+            .par_iter()
+            .enumerate()
+            .map(|(idx, (proof_data, proof_type))| {
+                (idx, verify_single_proof(proof_data, proof_type))
+            })
+            .collect();
+        
+        // Find first failure
+        for (idx, valid) in results {
+            if !valid {
+                return Err(idx);
+            }
+        }
+        
+        Ok(())
     }
 }
 
