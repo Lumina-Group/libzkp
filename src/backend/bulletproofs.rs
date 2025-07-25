@@ -196,7 +196,13 @@ impl BulletproofsBackend {
             return Err("values cannot be empty".to_string());
         }
         
-        let sum: u64 = values.iter().sum();
+        // Calculate sum with overflow checking
+        let mut sum: u64 = 0;
+        for &value in &values {
+            sum = sum.checked_add(value)
+                .ok_or_else(|| "integer overflow in sum calculation".to_string())?;
+        }
+        
         if sum < threshold {
             return Err("threshold not met".to_string());
         }
