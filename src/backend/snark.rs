@@ -25,10 +25,10 @@ impl ConstraintSynthesizer<Fr> for EqualityCircuit {
 
         let params = UnitVar::default();
 
-        let a_bytes = self.a.unwrap().to_le_bytes();
+        let a_bytes = self.a.ok_or(SynthesisError::AssignmentMissing)?.to_le_bytes();
         let a_uint8s = a_bytes
             .iter()
-            .map(|byte| UInt8::new_witness(cs.clone(), || Ok(byte)))
+            .map(|byte| UInt8::new_witness(cs.clone(), || Ok(*byte)))
             .collect::<Result<Vec<_>, _>>()?;
 
         let hash_gadget_output =
