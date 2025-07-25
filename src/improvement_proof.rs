@@ -56,7 +56,13 @@ pub fn verify_improvement(proof: Vec<u8>, old: u64) -> PyResult<bool> {
         return Ok(false);
     }
 
-    if new != old + diff {
+    // Check for potential integer overflow before addition
+    if let Some(calculated_new) = old.checked_add(diff) {
+        if new != calculated_new {
+            return Ok(false);
+        }
+    } else {
+        // Integer overflow occurred
         return Ok(false);
     }
 

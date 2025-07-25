@@ -19,7 +19,14 @@ pub fn prove_consistency(data: Vec<u64>) -> PyResult<Vec<u8>> {
     
     let proof_bytes = &backend_proof[0..commit_pos];
     let commit_start = commit_pos + commit_marker.len();
-    let commitment = backend_proof[commit_start..].to_vec();
+    
+    if backend_proof.len() < commit_start + 32 {
+        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "invalid commitment in backend proof"
+        ));
+    }
+    
+    let commitment = backend_proof[commit_start..commit_start + 32].to_vec();
     
     let proof = Proof::new(SCHEME_ID, proof_bytes.to_vec(), commitment);
     Ok(proof.to_bytes())
