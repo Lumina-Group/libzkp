@@ -61,6 +61,7 @@ maturin develop
 
 ```python
 import libzkp
+import hashlib
 
 # 範囲証明: 値10が0以上20以下の範囲にあることを証明
 proof = libzkp.prove_range(10, 0, 20)
@@ -68,7 +69,8 @@ assert libzkp.verify_range(proof, 0, 20)
 
 # 等価性証明: 2つの値が等しいことを証明
 proof = libzkp.prove_equality(5, 5)
-assert libzkp.verify_equality(proof, 5, 5)
+commit = hashlib.sha256((5).to_bytes(8, 'little')).digest()
+assert libzkp.verify_equality(proof, commit)
 
 # しきい値証明: 値の合計が閾値以上であることを証明
 proof = libzkp.prove_threshold([1, 2, 3], 5)

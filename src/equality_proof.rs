@@ -32,7 +32,7 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
 }
 
 #[pyfunction]
-pub fn verify_equality(proof: Vec<u8>, val1: u64, val2: u64) -> PyResult<bool> {
+pub fn verify_equality(proof: Vec<u8>, expected_commitment: Vec<u8>) -> PyResult<bool> {
     let proof = match Proof::from_bytes(&proof) {
         Some(p) => p,
         None => return Ok(false),
@@ -42,13 +42,13 @@ pub fn verify_equality(proof: Vec<u8>, val1: u64, val2: u64) -> PyResult<bool> {
         return Ok(false);
     }
 
-    if val1 != val2 {
+    if expected_commitment.len() != 32 {
         return Ok(false);
     }
 
-    let mut data = Vec::new();
-    data.extend_from_slice(&val1.to_le_bytes());
-    data.extend_from_slice(&val2.to_le_bytes());
+    if proof.commitment != expected_commitment {
+        return Ok(false);
+    }
 
-    Ok(SnarkBackend::verify(&proof.proof, &data))
+    Ok(SnarkBackend::verify(&proof.proof, &[]))
 }
