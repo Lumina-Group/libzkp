@@ -6,11 +6,21 @@ libzkp は、Python、Rust から利用可能な高性能なゼロ知識証明 (
 
 ## 特徴
 
+### 基本機能
 - **高性能**: Rust による実装で高速な証明生成・検証
 - **多様な証明タイプ**: 6種類の実用的なゼロ知識証明をサポート
 - **複数のバックエンド**: Bulletproofs、SNARK、STARK の3つのバックエンド
 - **Python統合**: シンプルで使いやすい Python API
 - **型安全**: Rust の型システムによる安全性
+
+### 高度な機能 (v0.2.0+)
+- **証明合成**: 複数の証明を組み合わせた複合証明の作成・検証
+- **パフォーマンス最適化**: キャッシング、並列処理、メモリプール
+- **バッチ処理**: 複数の証明を効率的に一括生成
+- **メタデータサポート**: 証明にコンテキスト情報を付加
+- **エラーハンドリング**: 包括的なエラー処理と検証
+- **ベンチマーク機能**: パフォーマンス測定とプロファイリング
+- **ユーティリティ**: 共通処理の統合とコード重複の削減
 
 ## サポートする証明タイプ
 
@@ -89,7 +99,67 @@ proof = libzkp.prove_consistency([1, 2, 3])
 assert libzkp.verify_consistency(proof)
 ```
 
+### 高度な機能
+
+#### 証明の合成と組み合わせ
+
+```python
+# 複数の証明を組み合わせて複合証明を作成
+range_proof = libzkp.prove_range(25, 18, 65)
+equality_proof = libzkp.prove_equality(100, 100)
+threshold_proof = libzkp.prove_threshold([50, 30, 20], 90)
+
+# 複合証明の作成
+composite_proof = libzkp.create_composite_proof([range_proof, equality_proof, threshold_proof])
+
+# 複合証明の検証
+is_valid = libzkp.verify_composite_proof(composite_proof)
+```
+
+#### パフォーマンス最適化とキャッシング
+
+```python
+# キャッシュ機能付きの証明生成（高速化）
+proof = libzkp.prove_range_cached(50, 0, 100)
+
+# 並列検証
+proofs = [(proof1, "range"), (proof2, "equality"), (proof3, "threshold")]
+results = libzkp.verify_proofs_parallel(proofs)
+
+# パフォーマンスベンチマーク
+metrics = libzkp.benchmark_proof_generation("range", 100)
+print(f"平均時間: {metrics['average_time_ms']:.2f}ms")
+print(f"スループット: {metrics['proofs_per_second']:.2f} proofs/sec")
+```
+
+#### メタデータ付き証明
+
+```python
+# メタデータを含む証明の作成
+metadata = {
+    "purpose": b"identity_verification",
+    "timestamp": str(int(time.time())).encode(),
+    "issuer": b"authority"
+}
+proof_with_metadata = libzkp.create_proof_with_metadata(proof, metadata)
+
+# メタデータの抽出
+extracted_metadata = libzkp.extract_proof_metadata(proof_with_metadata)
+```
+
+#### バッチ処理
+
+```python
+# バッチ処理による効率化
+batch_id = libzkp.create_proof_batch()
+libzkp.batch_add_range_proof(batch_id, 25, 18, 65)
+# ... 他の証明をバッチに追加
+batch_results = libzkp.process_batch(batch_id)
+```
+
 ### 実用的な例
+
+#### 年齢証明システム
 
 ```python
 import libzkp
@@ -106,4 +176,36 @@ def verify_adult_age(proof):
 # 使用例
 age_proof = prove_adult_age(25)  # 実際の年齢は秘匿
 is_adult = verify_adult_age(age_proof)  # True
+```
+
+#### 金融サービスのKYC（本人確認）
+
+```python
+def create_kyc_proof(age, balance, country_code):
+    """包括的なKYC証明を作成"""
+    # 年齢証明（18歳以上）
+    age_proof = libzkp.prove_range(age, 18, 150)
+    
+    # 残高証明（最低残高以上）
+    balance_proof = libzkp.prove_range(balance, 1000, 10000000)
+    
+    # 国籍証明（承認された国のリスト）
+    approved_countries = [1, 2, 3, 44, 81]  # USA, Canada, France, UK, Japan
+    location_proof = libzkp.prove_membership(country_code, approved_countries)
+    
+    # 複合証明の作成
+    kyc_proof = libzkp.create_composite_proof([age_proof, balance_proof, location_proof])
+    
+    # メタデータの追加
+    metadata = {
+        "verification_type": b"financial_kyc",
+        "timestamp": str(int(time.time())).encode(),
+        "risk_level": b"low"
+    }
+    
+    return libzkp.create_proof_with_metadata(kyc_proof, metadata)
+
+# 使用例
+kyc_proof = create_kyc_proof(age=25, balance=5000, country_code=1)
+is_verified = libzkp.verify_composite_proof(kyc_proof)
 ```
