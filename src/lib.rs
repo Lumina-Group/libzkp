@@ -32,7 +32,11 @@ fn libzkp(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(advanced::verify_composite_proof, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::create_proof_batch, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::batch_add_range_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::batch_add_equality_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::batch_add_threshold_proof, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::process_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::get_batch_status, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::clear_batch, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::clear_cache, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::get_cache_stats, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::enable_performance_monitoring, m)?)?;
