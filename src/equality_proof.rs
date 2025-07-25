@@ -13,9 +13,14 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
         ));
     }
 
+    let mut hasher = Sha256::new();
+    hasher.update(&val1.to_le_bytes());
+    let commitment = hasher.finalize().to_vec();
+
     let mut data = Vec::new();
     data.extend_from_slice(&val1.to_le_bytes());
     data.extend_from_slice(&val2.to_le_bytes());
+    data.extend_from_slice(&commitment);
     let snark_proof = SnarkBackend::prove(&data);
 
     if snark_proof.is_empty() {
@@ -24,9 +29,6 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
         ));
     }
 
-    let mut hasher = Sha256::new();
-    hasher.update(&val1.to_le_bytes());
-    let commitment = hasher.finalize().to_vec();
     let proof = Proof::new(SCHEME_ID, snark_proof, commitment);
     Ok(proof.to_bytes())
 }
@@ -50,5 +52,5 @@ pub fn verify_equality(proof: Vec<u8>, expected_commitment: Vec<u8>) -> PyResult
         return Ok(false);
     }
 
-    Ok(SnarkBackend::verify(&proof.proof, &[]))
+    Ok(SnarkBackend::verify(&proof.proof, &expected_commitment))
 }
