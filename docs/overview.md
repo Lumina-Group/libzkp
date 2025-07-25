@@ -9,7 +9,7 @@
 | `prove_range(value, min, max)` | `min` 以上 `max` 以下に値が存在することを示す範囲証明を生成します。 |
 | `verify_range(proof, min, max)` | 範囲証明を検証します。 |
 | `prove_equality(val1, val2)` | 2 つの値が等しいことを示す証明を生成します。 |
-| `verify_equality(proof, val1, val2)` | 等価性証明を検証します。 |
+| `verify_equality(proof, commitment)` | 等価性証明を検証します。 |
 | `prove_threshold(values, threshold)` | `values` の総和が `threshold` 以上であることを示す証明を生成します。 |
 | `verify_threshold(proof, threshold)` | しきい値証明を検証します。 |
 | `prove_membership(value, set)` | 値が集合 `set` に含まれることを示す証明を生成します。 |
