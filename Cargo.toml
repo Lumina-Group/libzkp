@@ -21,3 +21,7 @@ ark-relations = "0.5"
 ark-snark = "0.5"
 winterfell = "0.13"
 sha2 = "0.10"
+ark-crypto-primitives = { version = "0.5", features = ["r1cs", "crh"] }
+ark-bls12-381 = "0.5"
+ark-r1cs-std = "0.5"
+ark-ff = "0.5"
