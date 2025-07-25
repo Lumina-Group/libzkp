@@ -130,16 +130,7 @@ pub fn process_batch(batch_id: usize) -> PyResult<Vec<Vec<u8>>> {
         .map(|op| process_batch_operation(op))
         .collect();
     
-    // Convert results, propagating any errors
-    let mut proofs = Vec::new();
-    for result in results {
-        match result {
-            Ok(proof) => proofs.push(proof),
-            Err(e) => return Err(PyErr::from(e)),
-        }
-    }
-    
-    Ok(proofs)
+    results.into_iter().collect::<Result<Vec<_>, _>>().map_err(PyErr::from)
 }
 
 /// Get batch status
