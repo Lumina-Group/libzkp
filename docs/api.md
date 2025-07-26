@@ -232,13 +232,25 @@ proof = libzkp.prove_range(25, 18, 65)
 証明生成のベンチマークを実行します。
 
 **パラメータ:**
-- `proof_type`: "range" または "equality"
+- `proof_type`: 証明タイプ（"range", "equality", "threshold", "membership", "improvement", "consistency"）
 - `iterations`: 繰り返し回数
 
 **戻り値:**
+- `proof_type`: テストされた証明タイプ
+- `iterations`: 要求された繰り返し回数
+- `successful_iterations`: 成功した繰り返し回数
+- `success_rate`: 成功率（パーセント）
 - `total_time_ms`: 総実行時間（ミリ秒）
-- `average_time_ms`: 平均実行時間（ミリ秒）
+- `avg_time_ms`: 平均実行時間（ミリ秒）
+- `min_time_ms`: 最小実行時間（ミリ秒）
+- `max_time_ms`: 最大実行時間（ミリ秒）
+- `std_dev_ms`: 標準偏差（ミリ秒）
 - `proofs_per_second`: 1秒あたりの証明生成数
+- `throughput_ms_per_proof`: 証明1つあたりの処理時間（ミリ秒）
+
+**例外:**
+- `ValueError`: 無効な証明タイプまたは繰り返し回数の場合
+- `RuntimeError`: 証明生成に失敗した場合
 
 ### 並列処理
 
