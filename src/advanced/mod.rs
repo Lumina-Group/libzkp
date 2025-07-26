@@ -129,7 +129,7 @@ pub fn benchmark_proof_generation(proof_type: String, iterations: u32) -> PyResu
     results.insert("successful_iterations".to_string(), successful_iterations as f64);
     results.insert("success_rate".to_string(), (successful_iterations as f64 / iterations as f64) * 100.0);
     results.insert("total_time_ms".to_string(), total_time_ms);
-    results.insert("average_time_ms".to_string(), avg_time_ms);
+    results.insert("avg_time_ms".to_string(), avg_time_ms);
     results.insert("min_time_ms".to_string(), min_time_ms);
     results.insert("max_time_ms".to_string(), max_time_ms);
     results.insert("std_dev_ms".to_string(), std_dev_ms);

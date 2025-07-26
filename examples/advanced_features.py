@@ -148,7 +148,7 @@ def demonstrate_benchmarking():
                 print(f"  Iterations: {metrics['iterations']:.0f}")
                 print(f"  Successful: {metrics['successful_iterations']:.0f} ({metrics['success_rate']:.1f}%)")
                 print(f"  Total time: {metrics['total_time_ms']:.2f}ms")
-                print(f"  Average time: {metrics['average_time_ms']:.2f}ms")
+                print(f"  Average time: {metrics['avg_time_ms']:.2f}ms")
                 print(f"  Min time: {metrics['min_time_ms']:.2f}ms")
                 print(f"  Max time: {metrics['max_time_ms']:.2f}ms")
                 print(f"  Std dev: {metrics['std_dev_ms']:.2f}ms")

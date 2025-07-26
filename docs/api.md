@@ -241,7 +241,7 @@ proof = libzkp.prove_range(25, 18, 65)
 - `successful_iterations`: 成功した繰り返し回数
 - `success_rate`: 成功率（パーセント）
 - `total_time_ms`: 総実行時間（ミリ秒）
-- `average_time_ms`: 平均実行時間（ミリ秒）
+- `avg_time_ms`: 平均実行時間（ミリ秒）
 - `min_time_ms`: 最小実行時間（ミリ秒）
 - `max_time_ms`: 最大実行時間（ミリ秒）
 - `std_dev_ms`: 標準偏差（ミリ秒）

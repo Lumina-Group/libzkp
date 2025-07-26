@@ -147,7 +147,7 @@ results = libzkp.verify_proofs_parallel(proofs)
 
 # パフォーマンスベンチマーク
 metrics = libzkp.benchmark_proof_generation("range", 100)
-print(f"平均時間: {metrics['average_time_ms']:.2f}ms")
+print(f"平均時間: {metrics['avg_time_ms']:.2f}ms")
 print(f"スループット: {metrics['proofs_per_second']:.2f} proofs/sec")
 ```
 

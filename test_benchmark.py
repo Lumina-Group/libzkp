@@ -30,7 +30,7 @@ def test_benchmark_function():
             print(f"  Successful: {results['successful_iterations']:.0f}")
             print(f"  Success Rate: {results['success_rate']:.1f}%")
             print(f"  Total Time: {results['total_time_ms']:.2f}ms")
-            print(f"  Average Time: {results['average_time_ms']:.2f}ms")
+            print(f"  Average Time: {results['avg_time_ms']:.2f}ms")
             print(f"  Min Time: {results['min_time_ms']:.2f}ms")
             print(f"  Max Time: {results['max_time_ms']:.2f}ms")
             print(f"  Std Dev: {results['std_dev_ms']:.2f}ms")
