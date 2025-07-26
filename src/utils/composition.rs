@@ -81,15 +81,29 @@ impl CompositeProof {
     /// Deserialize composite proof from bytes
     pub fn from_bytes(data: &[u8]) -> ZkpResult<Self> {
         if data.len() < 12 {
-            return Err(ZkpError::InvalidProofFormat("composite proof too short".to_string()));
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "composite proof too short: expected at least 12 bytes, got {}",
+                data.len()
+            )));
         }
         
         if &data[0..4] != b"COMP" {
-            return Err(ZkpError::InvalidProofFormat("invalid composite proof header".to_string()));
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "invalid composite proof header: expected 'COMP', got '{:?}'",
+                &data[0..4]
+            )));
         }
         
         let num_proofs = u32::from_le_bytes(data[4..8].try_into().unwrap()) as usize;
         let num_metadata = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        
+        // Validate reasonable limits
+        if num_proofs > 1000 || num_metadata > 1000 {
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "composite proof has too many items: proofs={}, metadata={}",
+                num_proofs, num_metadata
+            )));
+        }
         
         let mut offset = 12;
         let mut proofs = Vec::new();
@@ -116,21 +130,38 @@ impl CompositeProof {
         
         // Read metadata
         let mut metadata = HashMap::new();
-        for _ in 0..num_metadata {
+        for i in 0..num_metadata {
             if offset + 8 > data.len() {
-                return Err(ZkpError::InvalidProofFormat("truncated metadata".to_string()));
+                return Err(ZkpError::InvalidProofFormat(format!(
+                    "truncated metadata header at index {}: offset={}, data_len={}",
+                    i, offset, data.len()
+                )));
             }
             
             let key_len = u32::from_le_bytes(data[offset..offset+4].try_into().unwrap()) as usize;
             let value_len = u32::from_le_bytes(data[offset+4..offset+8].try_into().unwrap()) as usize;
             offset += 8;
             
+            // Validate key and value lengths
+            if key_len > 1024 || value_len > 65536 {
+                return Err(ZkpError::InvalidProofFormat(format!(
+                    "metadata size too large at index {}: key_len={}, value_len={}",
+                    i, key_len, value_len
+                )));
+            }
+            
             if offset + key_len + value_len > data.len() {
-                return Err(ZkpError::InvalidProofFormat("truncated metadata content".to_string()));
+                return Err(ZkpError::InvalidProofFormat(format!(
+                    "truncated metadata content at index {}: offset={}, key_len={}, value_len={}, data_len={}",
+                    i, offset, key_len, value_len, data.len()
+                )));
             }
             
             let key = String::from_utf8(data[offset..offset+key_len].to_vec())
-                .map_err(|_| ZkpError::InvalidProofFormat("invalid metadata key".to_string()))?;
+                .map_err(|_| ZkpError::InvalidProofFormat(format!(
+                    "invalid metadata key at index {}: non-utf8 bytes",
+                    i
+                )))?;
             offset += key_len;
             
             let value = data[offset..offset+value_len].to_vec();

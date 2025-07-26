@@ -125,18 +125,18 @@ pub fn benchmark_proof_generation(py: Python, proof_type: String, iterations: u3
 
     let mut results = HashMap::new();
     results.insert("proof_type".to_string(), proof_type);
-    results.insert("iterations".to_string(), iterations as f64);
-    results.insert("successful_iterations".to_string(), successful_iterations as f64);
-    results.insert("success_rate".to_string(), (successful_iterations as f64 / iterations as f64) * 100.0);
-    results.insert("total_time_ms".to_string(), total_time_ms);
-    results.insert("avg_time_ms".to_string(), avg_time_ms);
-    results.insert("min_time_ms".to_string(), min_time_ms);
-    results.insert("max_time_ms".to_string(), max_time_ms);
-    results.insert("std_dev_ms".to_string(), std_dev_ms);
-    results.insert("proofs_per_second".to_string(), successful_iterations as f64 / (total_time_ms / 1000.0));
-    results.insert("throughput_ms_per_proof".to_string(), total_time_ms / successful_iterations as f64);
+    results.insert("iterations".to_string(), (iterations as f64).to_string());
+    results.insert("successful_iterations".to_string(), (successful_iterations as f64).to_string());
+    results.insert("success_rate".to_string(), ((successful_iterations as f64 / iterations as f64) * 100.0).to_string());
+    results.insert("total_time_ms".to_string(), total_time_ms.to_string());
+    results.insert("avg_time_ms".to_string(), avg_time_ms.to_string());
+    results.insert("min_time_ms".to_string(), min_time_ms.to_string());
+    results.insert("max_time_ms".to_string(), max_time_ms.to_string());
+    results.insert("std_dev_ms".to_string(), std_dev_ms.to_string());
+    results.insert("proofs_per_second".to_string(), (successful_iterations as f64 / (total_time_ms / 1000.0)).to_string());
+    results.insert("throughput_ms_per_proof".to_string(), (total_time_ms / successful_iterations as f64).to_string());
     
-    Ok(results)
+    Ok(results.into_py(py))
 }
 
 /// Optimized threshold proof generation with pre-checks
