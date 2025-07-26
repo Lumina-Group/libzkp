@@ -137,19 +137,25 @@ def demonstrate_benchmarking():
     print("\n=== Performance Benchmarking ===")
     
     try:
-        # Benchmark range proofs
-        range_metrics = libzkp.benchmark_proof_generation("range", 10)
-        print("Range Proof Benchmarks:")
-        print(f"  Total time: {range_metrics['total_time_ms']:.2f}ms")
-        print(f"  Average time: {range_metrics['average_time_ms']:.2f}ms")
-        print(f"  Throughput: {range_metrics['proofs_per_second']:.2f} proofs/sec")
+        # Test all supported proof types
+        proof_types = ["range", "equality", "threshold", "membership", "improvement", "consistency"]
         
-        # Benchmark equality proofs
-        equality_metrics = libzkp.benchmark_proof_generation("equality", 10)
-        print("\nEquality Proof Benchmarks:")
-        print(f"  Total time: {equality_metrics['total_time_ms']:.2f}ms")
-        print(f"  Average time: {equality_metrics['average_time_ms']:.2f}ms")
-        print(f"  Throughput: {equality_metrics['proofs_per_second']:.2f} proofs/sec")
+        for proof_type in proof_types:
+            try:
+                print(f"\n{proof_type.capitalize()} Proof Benchmarks:")
+                metrics = libzkp.benchmark_proof_generation(proof_type, 5)
+                
+                print(f"  Iterations: {metrics['iterations']:.0f}")
+                print(f"  Successful: {metrics['successful_iterations']:.0f} ({metrics['success_rate']:.1f}%)")
+                print(f"  Total time: {metrics['total_time_ms']:.2f}ms")
+                print(f"  Average time: {metrics['average_time_ms']:.2f}ms")
+                print(f"  Min time: {metrics['min_time_ms']:.2f}ms")
+                print(f"  Max time: {metrics['max_time_ms']:.2f}ms")
+                print(f"  Std dev: {metrics['std_dev_ms']:.2f}ms")
+                print(f"  Throughput: {metrics['proofs_per_second']:.2f} proofs/sec")
+                
+            except Exception as e:
+                print(f"  Failed to benchmark {proof_type}: {e}")
         
     except Exception as e:
         print(f"Benchmarking failed: {e}")

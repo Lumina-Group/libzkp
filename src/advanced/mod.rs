@@ -85,22 +85,57 @@ pub fn verify_proofs_parallel(proofs: Vec<(Vec<u8>, String)>) -> PyResult<Vec<bo
 #[pyfunction]
 pub fn benchmark_proof_generation(proof_type: String, iterations: u32) -> PyResult<HashMap<String, f64>> {
     let mut timer = Timer::new();
-    let mut total_time_ms = 0.0;
+    let mut times_ms = Vec::new();
+    let mut successful_iterations = 0;
 
     for _ in 0..iterations {
         timer.reset();
-        let _ = match proof_type.as_str() {
+        let result = match proof_type.as_str() {
             "range" => crate::range_proof::prove_range(50, 0, 100),
             "equality" => crate::equality_proof::prove_equality(42, 42),
-            _ => return Err(ZkpError::InvalidInput("unsupported proof type".to_string()).into()),
+            "threshold" => crate::threshold_proof::prove_threshold(vec![10, 20, 30, 40], 50),
+            "membership" => crate::set_membership::prove_membership(25, vec![10, 20, 25, 30, 40]),
+            "improvement" => crate::improvement_proof::prove_improvement(30, 50),
+            "consistency" => crate::consistency_proof::prove_consistency(vec![10, 20, 30, 40, 50]),
+            _ => return Err(ZkpError::InvalidInput(format!("unsupported proof type: {}", proof_type)).into()),
         };
-        total_time_ms += timer.elapsed().as_secs_f64() * 1000.0;
+        
+        if result.is_ok() {
+            let elapsed_ms = timer.elapsed().as_secs_f64() * 1000.0;
+            times_ms.push(elapsed_ms);
+            successful_iterations += 1;
+        }
     }
 
+    if successful_iterations == 0 {
+        return Err(ZkpError::InvalidInput("no successful proof generations".to_string()).into());
+    }
+
+    // Calculate statistics
+    let total_time_ms: f64 = times_ms.iter().sum();
+    let avg_time_ms = total_time_ms / successful_iterations as f64;
+    let min_time_ms = times_ms.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    let max_time_ms = times_ms.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+    
+    // Calculate standard deviation
+    let variance = times_ms.iter()
+        .map(|&x| (x - avg_time_ms).powi(2))
+        .sum::<f64>() / successful_iterations as f64;
+    let std_dev_ms = variance.sqrt();
+
     let mut results = HashMap::new();
+    results.insert("proof_type".to_string(), proof_type);
+    results.insert("iterations".to_string(), iterations as f64);
+    results.insert("successful_iterations".to_string(), successful_iterations as f64);
+    results.insert("success_rate".to_string(), (successful_iterations as f64 / iterations as f64) * 100.0);
     results.insert("total_time_ms".to_string(), total_time_ms);
-    results.insert("average_time_ms".to_string(), total_time_ms / iterations as f64);
-    results.insert("proofs_per_second".to_string(), iterations as f64 / (total_time_ms / 1000.0));
+    results.insert("average_time_ms".to_string(), avg_time_ms);
+    results.insert("min_time_ms".to_string(), min_time_ms);
+    results.insert("max_time_ms".to_string(), max_time_ms);
+    results.insert("std_dev_ms".to_string(), std_dev_ms);
+    results.insert("proofs_per_second".to_string(), successful_iterations as f64 / (total_time_ms / 1000.0));
+    results.insert("throughput_ms_per_proof".to_string(), total_time_ms / successful_iterations as f64);
+    
     Ok(results)
 }
 
