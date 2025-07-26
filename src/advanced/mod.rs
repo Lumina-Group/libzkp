@@ -83,7 +83,7 @@ pub fn verify_proofs_parallel(proofs: Vec<(Vec<u8>, String)>) -> PyResult<Vec<bo
 
 /// Benchmark proof generation performance for a given proof type
 #[pyfunction]
-pub fn benchmark_proof_generation(proof_type: String, iterations: u32) -> PyResult<HashMap<String, f64>> {
+pub fn benchmark_proof_generation(py: Python, proof_type: String, iterations: u32) -> PyResult<PyObject> {
     let mut timer = Timer::new();
     let mut times_ms = Vec::new();
     let mut successful_iterations = 0;
