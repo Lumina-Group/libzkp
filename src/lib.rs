@@ -1,16 +1,17 @@
 use pyo3::prelude::*;
 
-pub mod proof::consistency_proof;
-pub mod proof::equality_proof;
-pub mod proof::improvement_proof;
-pub mod proof::range_proof;
-pub mod proof::set_membership;
-pub mod proof::threshold_proof;
-
 pub mod backend;
-pub mod proof::proof;
+pub mod proof;
 pub mod utils;
 pub mod advanced;
+pub mod proof;
+pub use proof::consistency_proof;
+pub use proof::equality_proof;
+pub use proof::improvement_proof;
+pub use proof::range_proof;
+pub use proof::set_membership;
+pub use proof::threshold_proof;
+
 
 #[pymodule]
 fn libzkp(_py: Python, m: &PyModule) -> PyResult<()> {
