@@ -6,18 +6,18 @@ pub mod advanced;
 
 #[pymodule]
 fn libzkp(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(range_proof::prove_range, m)?)?;
-    m.add_function(wrap_pyfunction!(range_proof::verify_range, m)?)?;
-    m.add_function(wrap_pyfunction!(equality_proof::prove_equality, m)?)?;
-    m.add_function(wrap_pyfunction!(equality_proof::verify_equality, m)?)?;
-    m.add_function(wrap_pyfunction!(threshold_proof::prove_threshold, m)?)?;
-    m.add_function(wrap_pyfunction!(threshold_proof::verify_threshold, m)?)?;
-    m.add_function(wrap_pyfunction!(set_membership::prove_membership, m)?)?;
-    m.add_function(wrap_pyfunction!(set_membership::verify_membership, m)?)?;
-    m.add_function(wrap_pyfunction!(improvement_proof::prove_improvement, m)?)?;
-    m.add_function(wrap_pyfunction!(improvement_proof::verify_improvement, m)?)?;
-    m.add_function(wrap_pyfunction!(consistency_proof::prove_consistency, m)?)?;
-    m.add_function(wrap_pyfunction!(consistency_proof::verify_consistency, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::range_proof::prove_range, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::range_proof::verify_range, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::equality_proof::prove_equality, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::equality_proof::verify_equality, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::threshold_proof::prove_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::threshold_proof::verify_threshold, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::set_membership::prove_membership, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::set_membership::verify_membership, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::improvement_proof::prove_improvement, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::improvement_proof::verify_improvement, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::consistency_proof::prove_consistency, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::consistency_proof::verify_consistency, m)?)?;
     
     // Advanced features
     m.add_function(wrap_pyfunction!(advanced::create_composite_proof, m)?)?;
