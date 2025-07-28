@@ -5,7 +5,7 @@ pub mod utils;
 pub mod advanced;
 
 #[pymodule]
-fn libzkp(_py: Python, m: &PyModule) -> PyResult<()> {
+fn libzkp(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(proof::range_proof::prove_range, m)?)?;
     m.add_function(wrap_pyfunction!(proof::range_proof::verify_range, m)?)?;
     m.add_function(wrap_pyfunction!(proof::equality_proof::prove_equality, m)?)?;

@@ -97,7 +97,7 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
+        let _value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
             Ok(c) => c,
             Err(_) => return false,
         };
@@ -377,10 +377,10 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, num_values * 2);
+        let _pc_gens = PedersenGens::default();
+        let _bp_gens = BulletproofGens::new(64, num_values * 2);
         
-        for i in 1..num_values {
+        for _i in 1..num_values {
             if reader.len() < 4 {
                 return false;
             }
@@ -391,7 +391,7 @@ impl BulletproofsBackend {
                 return false;
             }
             let rp_bytes = &reader[0..rp_len];
-            let range_proof = match RangeProof::from_bytes(rp_bytes) {
+            let _range_proof = match RangeProof::from_bytes(rp_bytes) {
                 Ok(rp) => rp,
                 Err(_) => return false,
             };
@@ -619,7 +619,7 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let sum_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
+        let _sum_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
             Ok(c) => c,
             Err(_) => return false,
         };
