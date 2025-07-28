@@ -2,7 +2,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org)
 
-libzkp は、Python、Rust から利用可能な高性能なゼロ知識証明 (Zero-Knowledge Proof) ライブラリです。Rust で実装されており、PyO3 と maturin を用いて Python モジュールとしてビルドできます。
+libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowledge Proof) ライブラリです。Rust で実装されており、PyO3 と maturin を用いて Python モジュールとしてビルドできます。
 
 ## 特徴
 
@@ -13,7 +13,7 @@ libzkp は、Python、Rust から利用可能な高性能なゼロ知識証明 (
 - **Python統合**: シンプルで使いやすい Python API
 - **型安全**: Rust の型システムによる安全性
 
-### 高度な機能 (v0.2.0+)
+### 高度な機能
 - **証明合成**: 複数の証明を組み合わせた複合証明の作成・検証
 - **パフォーマンス最適化**: キャッシング、並列処理、メモリプール
 - **バッチ処理**: 複数の証明を効率的に一括生成
@@ -298,7 +298,7 @@ except ValueError as e:
 
 ## API リファレンス
 
-詳細なAPIドキュメントは[docs/api.md](docs/api.md)を参照してください。
+詳細なAPIドキュメントは[api.md](docs/api.md)を参照してください。
 
 ## 貢献
 
