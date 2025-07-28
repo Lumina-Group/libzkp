@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 
 pub mod backend;
-pub mod proof;
 pub mod utils;
 pub mod advanced;
 pub mod proof;
