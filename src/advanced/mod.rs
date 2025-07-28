@@ -55,7 +55,7 @@ pub fn prove_range_cached(value: u64, min: u64, max: u64) -> PyResult<Vec<u8>> {
         return Ok(cached);
     }
 
-    let proof = crate::range_proof::prove_range(value, min, max)?;
+    let proof = crate::proof::range_proof::prove_range(value, min, max)?;
     cache.put(cache_key, proof.clone());
     Ok(proof)
 }
@@ -67,7 +67,7 @@ pub fn prove_equality_advanced(val1: u64, val2: u64, context: Option<Vec<u8>>) -
         return Err(ZkpError::InvalidInput("values must be equal".to_string()).into());
     }
 
-    let mut proof = crate::equality_proof::prove_equality(val1, val2)?;
+    let mut proof = crate::proof::equality_proof::prove_equality(val1, val2)?;
     if let Some(ctx) = context {
         proof.extend_from_slice(&ctx);
     }
@@ -91,12 +91,12 @@ pub fn benchmark_proof_generation(py: Python, proof_type: String, iterations: u3
     for _ in 0..iterations {
         timer.reset();
         let result = match proof_type.as_str() {
-            "range" => crate::range_proof::prove_range(50, 0, 100),
-            "equality" => crate::equality_proof::prove_equality(42, 42),
-            "threshold" => crate::threshold_proof::prove_threshold(vec![10, 20, 30, 40], 50),
-            "membership" => crate::set_membership::prove_membership(25, vec![10, 20, 25, 30, 40]),
-            "improvement" => crate::improvement_proof::prove_improvement(30, 50),
-            "consistency" => crate::consistency_proof::prove_consistency(vec![10, 20, 30, 40, 50]),
+            "range" => crate::proof::range_proof::prove_range(50, 0, 100),
+            "equality" => crate::proof::equality_proof::prove_equality(42, 42),
+            "threshold" => crate::proof::threshold_proof::prove_threshold(vec![10, 20, 30, 40], 50),
+            "membership" => crate::proof::set_membership::prove_membership(25, vec![10, 20, 25, 30, 40]),
+            "improvement" => crate::proof::improvement_proof::prove_improvement(30, 50),
+            "consistency" => crate::proof::consistency_proof::prove_consistency(vec![10, 20, 30, 40, 50]),
             _ => return Err(ZkpError::InvalidInput(format!("unsupported proof type: {}", proof_type)).into()),
         };
         
@@ -153,7 +153,7 @@ pub fn prove_threshold_optimized(values: Vec<u64>, threshold: u64) -> PyResult<V
         return Err(ZkpError::InvalidInput("sum does not meet threshold".to_string()).into());
     }
 
-    crate::threshold_proof::prove_threshold(values, threshold)
+    crate::proof::threshold_proof::prove_threshold(values, threshold)
 }
 
 /// Validate a chain of proofs for structural integrity

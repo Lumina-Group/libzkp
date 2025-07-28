@@ -131,17 +131,17 @@ pub fn clear_batch(batch_id: usize) -> PyResult<()> {
 /// Helper to generate a single proof for a batch operation
 fn process_batch_operation(op: &BatchOperation) -> Result<Vec<u8>, ZkpError> {
     match op {
-        BatchOperation::RangeProof { value, min, max } => crate::range_proof::prove_range(*value, *min, *max)
+        BatchOperation::RangeProof { value, min, max } => crate::proof::range_proof::prove_range(*value, *min, *max)
             .map_err(|_| ZkpError::ProofGenerationFailed("Range proof failed".to_string())),
-        BatchOperation::EqualityProof { val1, val2 } => crate::equality_proof::prove_equality(*val1, *val2)
+        BatchOperation::EqualityProof { val1, val2 } => crate::proof::equality_proof::prove_equality(*val1, *val2)
             .map_err(|_| ZkpError::ProofGenerationFailed("Equality proof failed".to_string())),
-        BatchOperation::ThresholdProof { values, threshold } => crate::threshold_proof::prove_threshold(values.clone(), *threshold)
+        BatchOperation::ThresholdProof { values, threshold } => crate::proof::threshold_proof::prove_threshold(values.clone(), *threshold)
             .map_err(|_| ZkpError::ProofGenerationFailed("Threshold proof failed".to_string())),
-        BatchOperation::MembershipProof { value, set } => crate::set_membership::prove_membership(*value, set.clone())
+        BatchOperation::MembershipProof { value, set } => crate::proof::set_membership::prove_membership(*value, set.clone())
             .map_err(|_| ZkpError::ProofGenerationFailed("Membership proof failed".to_string())),
-        BatchOperation::ImprovementProof { old, new } => crate::improvement_proof::prove_improvement(*old, *new)
+        BatchOperation::ImprovementProof { old, new } => crate::proof::improvement_proof::prove_improvement(*old, *new)
             .map_err(|_| ZkpError::ProofGenerationFailed("Improvement proof failed".to_string())),
-        BatchOperation::ConsistencyProof { data } => crate::consistency_proof::prove_consistency(data.clone())
+        BatchOperation::ConsistencyProof { data } => crate::proof::consistency_proof::prove_consistency(data.clone())
             .map_err(|_| ZkpError::ProofGenerationFailed("Consistency proof failed".to_string())),
     }
 }
