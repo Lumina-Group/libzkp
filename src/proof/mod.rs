@@ -1,6 +1,6 @@
-pub mod consistency_proof;
-pub mod equality_proof;
-pub mod improvement_proof;
-pub mod range_proof;
-pub mod set_membership;
-pub mod threshold_proof;
+pub mod proof::consistency_proof;
+pub mod proof::equality_proof;
+pub mod proof::improvement_proof;
+pub mod proof::range_proof;
+pub mod proof::set_membership;
+pub mod proof::threshold_proof;
