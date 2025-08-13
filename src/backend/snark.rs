@@ -1,12 +1,7 @@
 use super::ZkpBackend;
 use ark_bn254::{Bn254, Fr};
-// The circuit enforces: (1) a == b as field elements, (2) a fits into 64 bits,
-// and (3) SHA-256(LE_Bytes(a)) == public commitment. This ties the witness value
-// to the commitment inside the circuit without any out-of-circuit assumptions.
 use ark_crypto_primitives::crh::constraints::CRHSchemeGadget;
-use ark_crypto_primitives::crh::sha256;
 use ark_crypto_primitives::crh::sha256::constraints::{Sha256Gadget, UnitVar};
-use ark_ff::PrimeField;
 use ark_groth16::Groth16;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -43,7 +38,7 @@ impl ConstraintSynthesizer<Fr> for EqualityCircuit {
         let a_bits_le_64: Vec<Boolean<Fr>> = a_bits_le.drain(0..64).collect();
         // Remaining higher bits must be zero to represent a 64-bit integer faithfully
         for bit in a_bits_le.into_iter() {
-            bit.enforce_equal(&Boolean::FALSE())?;
+            bit.enforce_equal(&Boolean::FALSE)?;
         }
 
         // Build 8 LE bytes from the 64 LSBits
@@ -53,17 +48,15 @@ impl ConstraintSynthesizer<Fr> for EqualityCircuit {
         }
 
         // Compute SHA-256 over the 8-byte LE encoding of 'a'
-        let digest_bytes = <Sha256Gadget as CRHSchemeGadget<sha256::CRH, Fr>>::evaluate(
-            &UnitVar::default(),
-            &a_bytes_le,
-        )?; // 32 bytes
+        let digest_var = Sha256Gadget::<Fr>::evaluate(&UnitVar::default(), &a_bytes_le)?; // DigestVar
+        let digest_bytes = digest_var.to_bytes_le()?; // Vec<UInt8<Fr>> length 32
 
         // Public input: expected 32-byte commitment
         let expected_commitment = self
             .hash_input
             .ok_or(SynthesisError::AssignmentMissing)?
             .to_vec();
-        let expected_commitment_bytes = UInt8::<Fr>::new_input_vec(cs.clone(), || Ok(expected_commitment))?;
+        let expected_commitment_bytes = UInt8::<Fr>::new_input_vec(cs.clone(), expected_commitment.as_slice())?;
 
         // Enforce digest == expected_commitment (byte-wise)
         for (d, e) in digest_bytes.iter().zip(expected_commitment_bytes.iter()) {

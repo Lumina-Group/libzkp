@@ -226,6 +226,7 @@ pub mod parallel {
     use crate::proof::{Proof, PROOF_VERSION};
     use crate::utils::proof_helpers::reconstruct_bulletproofs_proof;
     use crate::backend::{bulletproofs::BulletproofsBackend, snark::SnarkBackend, stark::StarkBackend};
+    use crate::backend::ZkpBackend;
     
     /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
