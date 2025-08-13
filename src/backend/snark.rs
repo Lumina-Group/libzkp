@@ -110,13 +110,15 @@ impl SnarkBackend {
 
         let setup = Self::get_universal_setup();
         let rng = &mut OsRng;
-        let proof =
-            Groth16::<Bn254>::prove(&setup.0, circuit, rng).expect("proof generation failed");
+        let proof = match Groth16::<Bn254>::prove(&setup.0, circuit, rng) {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        };
 
         let mut bytes = Vec::new();
-        proof
-            .serialize_uncompressed(&mut bytes)
-            .expect("serialize proof");
+        if proof.serialize_uncompressed(&mut bytes).is_err() {
+            return vec![];
+        }
         bytes
     }
 
@@ -127,11 +129,22 @@ impl SnarkBackend {
         };
 
         let setup = Self::get_universal_setup();
-        let pvk = Groth16::<Bn254>::process_vk(&setup.1).expect("process vk failed");
+        let pvk = match Groth16::<Bn254>::process_vk(&setup.1) {
+            Ok(pvk) => pvk,
+            Err(_) => return false,
+        };
 
-        let hash_input_fr = Fr::from_le_bytes_mod_order(hash_input);
+        if hash_input.len() != 32 {
+            return false;
+        }
 
-        Groth16::<Bn254>::verify_with_processed_vk(&pvk, &[hash_input_fr], &proof).unwrap_or(false)
+        // Map 32-byte commitment into 32 public field inputs (one per byte)
+        let public_inputs: Vec<Fr> = hash_input
+            .iter()
+            .map(|b| Fr::from(*b as u64))
+            .collect();
+
+        Groth16::<Bn254>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap_or(false)
     }
 }
 

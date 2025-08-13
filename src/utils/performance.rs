@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 /// Simple LRU cache for proof results
@@ -88,30 +88,19 @@ impl ProofCache {
     }
 }
 
-/// Global proof cache instance
-static mut GLOBAL_CACHE: Option<ProofCache> = None;
-static CACHE_INIT: std::sync::Once = std::sync::Once::new();
-
-/// Global performance metrics instance
-static mut GLOBAL_METRICS: Option<Arc<Mutex<PerformanceMetrics>>> = None;
-static METRICS_INIT: std::sync::Once = std::sync::Once::new();
+/// Global proof cache instance using OnceLock
+static GLOBAL_CACHE: OnceLock<ProofCache> = OnceLock::new();
+/// Global performance metrics instance using OnceLock
+static GLOBAL_METRICS: OnceLock<Arc<Mutex<PerformanceMetrics>>> = OnceLock::new();
 
 pub fn get_global_cache() -> &'static ProofCache {
-    unsafe {
-        CACHE_INIT.call_once(|| {
-            GLOBAL_CACHE = Some(ProofCache::new(1000, 3600)); // 1000 entries, 1 hour TTL
-        });
-        GLOBAL_CACHE.as_ref().unwrap()
-    }
+    GLOBAL_CACHE.get_or_init(|| ProofCache::new(1000, 3600))
 }
 
 pub fn get_global_metrics() -> Arc<Mutex<PerformanceMetrics>> {
-    unsafe {
-        METRICS_INIT.call_once(|| {
-            GLOBAL_METRICS = Some(Arc::new(Mutex::new(PerformanceMetrics::new())));
-        });
-        GLOBAL_METRICS.as_ref().unwrap().clone()
-    }
+    GLOBAL_METRICS
+        .get_or_init(|| Arc::new(Mutex::new(PerformanceMetrics::new())))
+        .clone()
 }
 
 /// Record a performance metric in the global collector

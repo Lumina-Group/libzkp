@@ -1,6 +1,6 @@
 use super::ZkpBackend;
 use bulletproofs::{BulletproofGens, PedersenGens, RangeProof};
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::rngs::OsRng;
@@ -25,9 +25,8 @@ impl BulletproofsBackend {
         let value_commit = pc_gens.commit(Scalar::from(value), blinding).compress();
         
         let diff_min = value - min;
-        let mut diff_min_blinding_bytes = [0u8; 32];
-        rng.fill_bytes(&mut diff_min_blinding_bytes);
-        let diff_min_blinding = Scalar::from_bytes_mod_order(diff_min_blinding_bytes);
+        // Tie diff_min commitment to value commitment: use the SAME blinding
+        let diff_min_blinding = blinding;
         
         let mut transcript_min = Transcript::new(b"libzkp_range_min");
         let (range_proof_min, diff_min_commit) = RangeProof::prove_single(
@@ -40,9 +39,8 @@ impl BulletproofsBackend {
         ).map_err(|_| "min range proof generation failed".to_string())?;
         
         let diff_max = max - value;
-        let mut diff_max_blinding_bytes = [0u8; 32];
-        rng.fill_bytes(&mut diff_max_blinding_bytes);
-        let diff_max_blinding = Scalar::from_bytes_mod_order(diff_max_blinding_bytes);
+        // Ensure linkage: use the NEGATED blinding so that (max*B - C_v) equals commit(diff_max, -blinding)
+        let diff_max_blinding = -blinding;
         
         let mut transcript_max = Transcript::new(b"libzkp_range_max");
         let (range_proof_max, diff_max_commit) = RangeProof::prove_single(
@@ -70,10 +68,6 @@ impl BulletproofsBackend {
         proof_bytes.extend_from_slice(diff_min_commit.as_bytes());
         proof_bytes.extend_from_slice(diff_max_commit.as_bytes());
         
-        proof_bytes.extend_from_slice(&blinding.to_bytes());
-        proof_bytes.extend_from_slice(&diff_min_blinding.to_bytes());
-        proof_bytes.extend_from_slice(&diff_max_blinding.to_bytes());
-        
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
         result.extend_from_slice(b"COMMIT:");
@@ -97,7 +91,14 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let _value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
+        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let value_commit_point: RistrettoPoint = match value_commit.decompress() {
+            Some(p) => p,
+            None => return false,
+        };
         
         let mut reader = proof_bytes;
         
@@ -150,32 +151,24 @@ impl BulletproofsBackend {
         let diff_max_commit = CompressedRistretto::from_slice(&reader[32..64]);
         reader = &reader[64..];
         
-        if reader.len() < 96 {
-            return false;
-        }
-        let _value_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_min_blinding = match Scalar::from_canonical_bytes(reader[32..64].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_max_blinding = match Scalar::from_canonical_bytes(reader[64..96].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);
         
-        let mut transcript_min = Transcript::new(b"libzkp_range_min");
-        if range_proof_min.verify_single(&bp_gens, &pc_gens, &mut transcript_min, &diff_min_commit, 64).is_err() {
+        // Recompute expected diff commitments from the value commitment
+        let expected_min_commit = (value_commit_point - (Scalar::from(min) * pc_gens.B)).compress();
+        let expected_max_commit = ((Scalar::from(max) * pc_gens.B) - value_commit_point).compress();
+
+        // Optional: check included commits match expected linkage
+        if expected_min_commit != diff_min_commit || expected_max_commit != diff_max_commit {
             return false;
         }
         
+        let mut transcript_min = Transcript::new(b"libzkp_range_min");
+        if range_proof_min.verify_single(&bp_gens, &pc_gens, &mut transcript_min, &expected_min_commit, 64).is_err() {
+            return false;
+        }
         let mut transcript_max = Transcript::new(b"libzkp_range_max");
-        if range_proof_max.verify_single(&bp_gens, &pc_gens, &mut transcript_max, &diff_max_commit, 64).is_err() {
+        if range_proof_max.verify_single(&bp_gens, &pc_gens, &mut transcript_max, &expected_max_commit, 64).is_err() {
             return false;
         }
         
@@ -209,9 +202,8 @@ impl BulletproofsBackend {
         let sum_commit = pc_gens.commit(Scalar::from(sum), sum_blinding).compress();
         
         let diff = sum - threshold;
-        let mut diff_blinding_bytes = [0u8; 32];
-        rng.fill_bytes(&mut diff_blinding_bytes);
-        let diff_blinding = Scalar::from_bytes_mod_order(diff_blinding_bytes);
+        // Link diff to sum: use the same blinding
+        let diff_blinding = sum_blinding;
         
         let mut transcript = Transcript::new(b"libzkp_threshold");
         let (range_proof, diff_commit) = RangeProof::prove_single(
@@ -232,10 +224,6 @@ impl BulletproofsBackend {
         proof_bytes.extend_from_slice(&rp_bytes);
         
         proof_bytes.extend_from_slice(diff_commit.as_bytes());
-        
-        proof_bytes.extend_from_slice(&sum_blinding.to_bytes());
-        
-        proof_bytes.extend_from_slice(&diff_blinding.to_bytes());
         
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
@@ -365,9 +353,11 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let _pc_gens = PedersenGens::default();
-        let _bp_gens = BulletproofGens::new(64, num_values * 2);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(64, num_values * 2);
         
+        // Read range proofs into memory
+        let mut range_proofs = Vec::with_capacity(num_values.saturating_sub(1));
         for _i in 1..num_values {
             if reader.len() < 4 {
                 return false;
@@ -379,10 +369,11 @@ impl BulletproofsBackend {
                 return false;
             }
             let rp_bytes = &reader[0..rp_len];
-            let _range_proof = match RangeProof::from_bytes(rp_bytes) {
+            let range_proof = match RangeProof::from_bytes(rp_bytes) {
                 Ok(rp) => rp,
                 Err(_) => return false,
             };
+            range_proofs.push(range_proof);
             reader = &reader[rp_len..];
         }
         
@@ -405,6 +396,11 @@ impl BulletproofsBackend {
             
             let expected_diff = commit_i.unwrap() - commit_prev.unwrap();
             if expected_diff.compress() != diff_commit {
+                return false;
+            }
+            // Verify non-negativity of the difference via the corresponding range proof
+            let mut transcript = Transcript::new(b"libzkp_consistency");
+            if range_proofs[i - 1].verify_single(&bp_gens, &pc_gens, &mut transcript, &diff_commit, 64).is_err() {
                 return false;
             }
         }
@@ -467,8 +463,6 @@ impl BulletproofsBackend {
         
         proof_bytes.extend_from_slice(&response.to_bytes());
         
-        proof_bytes.extend_from_slice(&value_blinding.to_bytes());
-        
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
         result.extend_from_slice(b"COMMIT:");
@@ -492,7 +486,14 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
+        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let value_commit_point = match value_commit.decompress() {
+            Some(p) => p,
+            None => return false,
+        };
         
         let mut reader = proof_bytes;
         
@@ -546,14 +547,6 @@ impl BulletproofsBackend {
         };
         reader = &reader[32..];
         
-        if reader.len() < 32 {
-            return false;
-        }
-        let value_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        
         let pc_gens = PedersenGens::default();
         
         let mut transcript = Transcript::new(b"libzkp_membership");
@@ -571,13 +564,20 @@ impl BulletproofsBackend {
             return false;
         }
         
+        // Relation check without revealing value blinding:
+        // index_commit + c * value_commit == commit(i + c*set_val, response)
+        let index_commit_point = match index_commit.decompress() {
+            Some(p) => p,
+            None => return false,
+        };
+        let lhs = index_commit_point + (challenge * value_commit_point);
         for (i, &set_val) in proof_set.iter().enumerate() {
-            let expected_value_commit = pc_gens.commit(Scalar::from(set_val), value_blinding).compress();
-            if expected_value_commit == value_commit {
-                let expected_index_commit = pc_gens.commit(Scalar::from(i as u64), response - challenge * value_blinding).compress();
-                if expected_index_commit == index_commit {
-                    return true;
-                }
+            let rhs_point = pc_gens.commit(
+                Scalar::from(i as u64) + challenge * Scalar::from(set_val),
+                response,
+            );
+            if lhs == rhs_point {
+                return true;
             }
         }
         
@@ -636,29 +636,33 @@ impl BulletproofsBackend {
         let diff_commit = CompressedRistretto::from_slice(&reader[0..32]);
         reader = &reader[32..];
         
-        if reader.len() < 64 {
-            return false;
-        }
-        let _sum_blinding = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        let _diff_blinding = match Scalar::from_canonical_bytes(reader[32..64].try_into().unwrap()) {
-            ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
-        };
-        
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);
         
+        // Recompute expected diff commit from sum commit and threshold linkage
+        let sum_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
+        let sum_commit_point = match sum_commit.decompress() {
+            Some(p) => p,
+            None => return false,
+        };
+        let expected_diff_commit = (sum_commit_point - (Scalar::from(threshold) * pc_gens.B)).compress();
+
+        if expected_diff_commit != diff_commit {
+            return false;
+        }
+
         let mut transcript = Transcript::new(b"libzkp_threshold");
-        range_proof.verify_single(&bp_gens, &pc_gens, &mut transcript, &diff_commit, 64).is_ok()
+        range_proof.verify_single(&bp_gens, &pc_gens, &mut transcript, &expected_diff_commit, 64).is_ok()
     }
 }
 
 impl ZkpBackend for BulletproofsBackend {
     fn prove(data: &[u8]) -> Vec<u8> {
-        let value = u64::from_le_bytes(data.try_into().expect("invalid data"));
+        if data.len() != 8 { return vec![]; }
+        let value = u64::from_le_bytes(data.try_into().ok().unwrap());
 
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 1);
@@ -668,9 +672,10 @@ impl ZkpBackend for BulletproofsBackend {
         let blinding = Scalar::from_bytes_mod_order(bytes);
 
         let mut transcript = Transcript::new(b"libzkp_bulletproof");
-        let (proof, commit) =
-            RangeProof::prove_single(&bp_gens, &pc_gens, &mut transcript, value, &blinding, 64)
-                .expect("range proof failure");
+        let (proof, commit) = match RangeProof::prove_single(&bp_gens, &pc_gens, &mut transcript, value, &blinding, 64) {
+            Ok(v) => v,
+            Err(_) => return vec![],
+        };
 
         let mut out = proof.to_bytes();
         out.extend_from_slice(commit.as_bytes());
