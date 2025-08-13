@@ -97,10 +97,7 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let _value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let _value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
         
         let mut reader = proof_bytes;
         
@@ -149,14 +146,8 @@ impl BulletproofsBackend {
         if reader.len() < 64 {
             return false;
         }
-        let diff_min_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
-        let diff_max_commit = match CompressedRistretto::from_slice(&reader[32..64]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let diff_min_commit = CompressedRistretto::from_slice(&reader[0..32]);
+        let diff_max_commit = CompressedRistretto::from_slice(&reader[32..64]);
         reader = &reader[64..];
         
         if reader.len() < 96 {
@@ -361,10 +352,7 @@ impl BulletproofsBackend {
         let mut commitments = Vec::with_capacity(num_values);
         for _ in 0..num_values {
             let commit_bytes = &reader[0..32];
-            let commit = match CompressedRistretto::from_slice(commit_bytes) {
-                Ok(c) => c,
-                Err(_) => return false,
-            };
+            let commit = CompressedRistretto::from_slice(commit_bytes);
             commitments.push(commit);
             reader = &reader[32..];
         }
@@ -504,10 +492,7 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let value_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let value_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
         
         let mut reader = proof_bytes;
         
@@ -540,10 +525,7 @@ impl BulletproofsBackend {
         if reader.len() < 32 {
             return false;
         }
-        let index_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let index_commit = CompressedRistretto::from_slice(&reader[0..32]);
         reader = &reader[32..];
         
         if reader.len() < 32 {
@@ -619,10 +601,7 @@ impl BulletproofsBackend {
             return false;
         }
         
-        let _sum_commit = match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let _sum_commit = CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
         
         let mut reader = proof_bytes;
         
@@ -654,10 +633,7 @@ impl BulletproofsBackend {
         if reader.len() < 32 {
             return false;
         }
-        let diff_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let diff_commit = CompressedRistretto::from_slice(&reader[0..32]);
         reader = &reader[32..];
         
         if reader.len() < 64 {
@@ -713,10 +689,7 @@ impl ZkpBackend for BulletproofsBackend {
             Err(_) => return false,
         };
 
-        let commit = match CompressedRistretto::from_slice(commit_bytes) {
-            Ok(c) => c,
-            Err(_) => return false,
-        };
+        let commit = CompressedRistretto::from_slice(commit_bytes);
 
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 1);

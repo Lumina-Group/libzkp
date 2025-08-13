@@ -69,6 +69,27 @@ pub fn batch_add_threshold_proof(
     with_batch_mut(batch_id, |batch| batch.add_threshold_proof(values, threshold))
 }
 
+/// Add a membership proof operation to the batch
+#[pyfunction]
+pub fn batch_add_membership_proof(batch_id: usize, value: u64, set: Vec<u64>) -> PyResult<()> {
+    validation::validate_membership_params(value, &set).map_err(PyErr::from)?;
+    with_batch_mut(batch_id, |batch| batch.add_membership_proof(value, set))
+}
+
+/// Add an improvement proof operation to the batch
+#[pyfunction]
+pub fn batch_add_improvement_proof(batch_id: usize, old: u64, new: u64) -> PyResult<()> {
+    validation::validate_improvement_params(old, new).map_err(PyErr::from)?;
+    with_batch_mut(batch_id, |batch| batch.add_improvement_proof(old, new))
+}
+
+/// Add a consistency proof operation to the batch
+#[pyfunction]
+pub fn batch_add_consistency_proof(batch_id: usize, data: Vec<u64>) -> PyResult<()> {
+    validation::validate_consistency_params(&data).map_err(PyErr::from)?;
+    with_batch_mut(batch_id, |batch| batch.add_consistency_proof(data))
+}
+
 /// Process a batch: generate all proofs in parallel and return them as byte vectors
 #[pyfunction]
 pub fn process_batch(batch_id: usize) -> PyResult<Vec<Vec<u8>>> {

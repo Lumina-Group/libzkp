@@ -264,13 +264,24 @@ proof = libzkp.prove_range(25, 18, 65)
 ### 並列処理
 
 #### `verify_proofs_parallel(proofs: List[Tuple[bytes, str]]) -> List[bool]`
-複数の証明を並列で検証します。
+複数の証明を並列で検証します（各タイプに対してバックエンド検証を実行）。
 
 **パラメータ:**
 - `proofs`: (証明データ, 証明タイプ) のタプルのリスト
   - 証明タイプ: "range", "equality", "threshold", "membership", "improvement", "consistency"
 
 **戻り値:** 各証明の検証結果のリスト
+
+### バッチ追加APIの拡充
+
+#### `batch_add_membership_proof(batch_id: int, value: int, set: List[int]) -> None`
+集合所属証明をバッチに追加します。
+
+#### `batch_add_improvement_proof(batch_id: int, old: int, new: int) -> None`
+向上証明をバッチに追加します。
+
+#### `batch_add_consistency_proof(batch_id: int, data: List[int]) -> None`
+整合性証明をバッチに追加します。
 
 ## ユーティリティ関数
 

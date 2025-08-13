@@ -27,6 +27,9 @@ fn libzkp(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(advanced::batch_add_range_proof, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::batch_add_equality_proof, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::batch_add_threshold_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::batch_add_membership_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::batch_add_improvement_proof, m)?)?;
+    m.add_function(wrap_pyfunction!(advanced::batch_add_consistency_proof, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::process_batch, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::get_batch_status, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::clear_batch, m)?)?;

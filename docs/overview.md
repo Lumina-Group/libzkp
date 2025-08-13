@@ -38,6 +38,9 @@
 | `batch_add_range_proof(batch_id, value, min, max)` | 範囲証明をバッチに追加します。 |
 | `batch_add_equality_proof(batch_id, val1, val2)` | 等価性証明をバッチに追加します。 |
 | `batch_add_threshold_proof(batch_id, values, threshold)` | しきい値証明をバッチに追加します。 |
+| `batch_add_membership_proof(batch_id, value, set)` | 集合所属証明をバッチに追加します。 |
+| `batch_add_improvement_proof(batch_id, old, new)` | 向上証明をバッチに追加します。 |
+| `batch_add_consistency_proof(batch_id, data)` | 整合性証明をバッチに追加します。 |
 | `process_batch(batch_id)` | バッチ内の全証明を並列生成します。 |
 | `get_batch_status(batch_id)` | バッチの状態を取得します。 |
 | `clear_batch(batch_id)` | バッチをクリアします。 |

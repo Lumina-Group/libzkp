@@ -32,6 +32,7 @@ impl ProofCache {
             // Check if entry is still valid
             if entry.created_at.elapsed() < self.ttl {
                 entry.access_count += 1;
+                record_global_cache_hit();
                 return Some(entry.data.clone());
             } else {
                 // Entry expired, remove it
@@ -39,6 +40,8 @@ impl ProofCache {
             }
         }
         
+        // Not found
+        record_global_cache_miss();
         None
     }
     
@@ -232,6 +235,8 @@ impl Default for Timer {
 pub mod parallel {
     use rayon::prelude::*;
     use crate::proof::{Proof, PROOF_VERSION};
+    use crate::utils::proof_helpers::reconstruct_bulletproofs_proof;
+    use crate::backend::{bulletproofs::BulletproofsBackend, snark::SnarkBackend, stark::StarkBackend};
     
     /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
@@ -245,114 +250,84 @@ pub mod parallel {
     
     /// Verify a single proof based on its type
     fn verify_single_proof(proof_data: &[u8], proof_type: &str) -> bool {
-        // First, try to parse the proof
+        // Parse proof bytes
         let proof = match Proof::from_bytes(proof_data) {
             Some(p) => p,
             None => return false,
         };
-        
-        // Check version
+
         if proof.version != PROOF_VERSION {
             return false;
         }
-        
-        // Verify based on proof type and scheme
+
         match proof_type {
             "range" => {
-                if proof.scheme != 1 {
-                    return false;
-                }
-                // For range proofs, we need min/max values which should be in the proof
-                // This is a simplified check - in production, we'd need the actual bounds
-                verify_range_proof_internal(&proof)
+                if proof.scheme != 1 { return false; }
+                // Parse min/max from bulletproofs payload
+                if proof.proof.len() < 16 { return false; }
+                let min = u64::from_le_bytes(proof.proof[0..8].try_into().unwrap());
+                let max = u64::from_le_bytes(proof.proof[8..16].try_into().unwrap());
+                if min > max { return false; }
+                if proof.commitment.len() != 32 { return false; }
+                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+                BulletproofsBackend::verify_range_with_bounds(&backend_proof, min, max)
             }
             "equality" => {
-                if proof.scheme != 2 {
-                    return false;
-                }
-                // For equality proofs, we need the expected commitment
-                // This is a simplified check
-                verify_equality_proof_internal(&proof)
+                if proof.scheme != 2 { return false; }
+                if proof.commitment.len() != 32 { return false; }
+                // Verify SNARK proof with embedded commitment as public input
+                SnarkBackend::verify(&proof.proof, &proof.commitment)
             }
             "threshold" => {
-                if proof.scheme != 3 {
-                    return false;
-                }
-                verify_threshold_proof_internal(&proof)
+                if proof.scheme != 3 { return false; }
+                if proof.proof.len() < 8 { return false; }
+                let threshold = u64::from_le_bytes(proof.proof[0..8].try_into().unwrap());
+                if proof.commitment.len() != 32 { return false; }
+                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+                BulletproofsBackend::verify_threshold(&backend_proof, threshold)
             }
             "membership" => {
-                if proof.scheme != 4 {
-                    return false;
+                if proof.scheme != 4 { return false; }
+                if proof.proof.len() < 4 { return false; }
+                // Extract set from proof payload
+                let set_size = u32::from_le_bytes(proof.proof[0..4].try_into().unwrap()) as usize;
+                let needed = 4 + set_size * 8;
+                if proof.proof.len() < needed { return false; }
+                let mut set = Vec::with_capacity(set_size);
+                let mut offset = 4;
+                for _ in 0..set_size {
+                    let val = u64::from_le_bytes(proof.proof[offset..offset+8].try_into().unwrap());
+                    set.push(val);
+                    offset += 8;
                 }
-                verify_membership_proof_internal(&proof)
+                if proof.commitment.len() != 32 { return false; }
+                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+                BulletproofsBackend::verify_set_membership(&backend_proof, set)
             }
             "improvement" => {
-                if proof.scheme != 5 {
-                    return false;
-                }
-                verify_improvement_proof_internal(&proof)
+                if proof.scheme != 5 { return false; }
+                if proof.commitment.len() != 16 { return false; }
+                let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
+                let new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
+                if diff == 0 { return false; }
+                let old = match new.checked_sub(diff) { Some(v) => v, None => return false };
+                // Prepare public inputs payload expected by backend verify
+                let mut data = Vec::with_capacity(16);
+                data.extend_from_slice(&old.to_le_bytes());
+                data.extend_from_slice(&new.to_le_bytes());
+                StarkBackend::verify(&proof.proof, &data)
             }
             "consistency" => {
-                if proof.scheme != 6 {
-                    return false;
-                }
-                verify_consistency_proof_internal(&proof)
+                if proof.scheme != 6 { return false; }
+                // Reconstruct backend proof and verify
+                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+                BulletproofsBackend::verify_consistency(&backend_proof)
             }
             _ => false,
         }
     }
     
-    fn verify_range_proof_internal(proof: &Proof) -> bool {
-        // Basic validation
-        if proof.commitment.len() != 32 {
-            return false;
-        }
-        // In a real implementation, we'd reconstruct and verify the bulletproofs
-        true
-    }
-    
-    fn verify_equality_proof_internal(proof: &Proof) -> bool {
-        // Basic validation
-        if proof.commitment.len() != 32 {
-            return false;
-        }
-        // In a real implementation, we'd verify the SNARK proof
-        true
-    }
-    
-    fn verify_threshold_proof_internal(proof: &Proof) -> bool {
-        // Basic validation
-        if proof.commitment.len() != 32 {
-            return false;
-        }
-        true
-    }
-    
-    fn verify_membership_proof_internal(proof: &Proof) -> bool {
-        // Basic validation
-        if proof.commitment.len() != 32 {
-            return false;
-        }
-        true
-    }
-    
-    fn verify_improvement_proof_internal(proof: &Proof) -> bool {
-        // Basic validation for improvement proofs
-        if proof.commitment.len() != 16 {
-            return false;
-        }
-        // Extract diff and new value
-        let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
-        let _new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
-        
-        // Diff must be positive
-        diff > 0
-    }
-    
-    fn verify_consistency_proof_internal(proof: &Proof) -> bool {
-        // Basic validation
-        !proof.commitment.is_empty()
-    }
+    // Removed simplified internal verifiers in favor of backend verification
     
     /// Generate multiple proofs in parallel
     pub fn generate_proofs_parallel<F, T>(

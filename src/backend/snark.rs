@@ -1,22 +1,20 @@
 use super::ZkpBackend;
 use ark_bn254::{Bn254, Fr};
-// NOTE: The in-circuit SHA-256 gadget evaluation previously triggered `AssignmentMissing` during
-// the trusted setup phase because it attempted to access concrete witness values via `.value()`.  
-// For demonstration purposes, we replace that computation with a direct equality constraint
-// between a witness representing the provided commitment and the public input. This avoids
-// requiring the hash gadget evaluation while still proving that the commitment supplied during
-// proof generation is the same value that is provided as a public input during verification.
-//
-// If full in-circuit SHA-256 verification is desired in the future, the gadget should be used
-// without calling `.value()` and the digest converted to field elements purely through
-// constraint logic rather than runtime evaluation.
-// use ark_crypto_primitives::crh::{sha256::constraints::{Sha256Gadget, UnitVar}, CRHSchemeGadget}; // <- removed for now
+// The circuit enforces: (1) a == b as field elements, (2) a fits into 64 bits,
+// and (3) SHA-256(LE_Bytes(a)) == public commitment. This ties the witness value
+// to the commitment inside the circuit without any out-of-circuit assumptions.
+use ark_crypto_primitives::crh::constraints::CRHSchemeGadget;
+use ark_crypto_primitives::crh::sha256;
+use ark_crypto_primitives::crh::sha256::constraints::{Sha256Gadget, UnitVar};
 use ark_ff::PrimeField;
 use ark_groth16::Groth16;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisError};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::rngs::OsRng;
+use ark_r1cs_std::prelude::*;
+use ark_r1cs_std::fields::fp::FpVar;
+use ark_r1cs_std::uint8::UInt8;
 use std::sync::OnceLock;
 
 #[derive(Clone)]
@@ -28,34 +26,49 @@ struct EqualityCircuit {
 
 impl ConstraintSynthesizer<Fr> for EqualityCircuit {
     fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
-        let a = cs.new_witness_variable(|| self.a.ok_or(SynthesisError::AssignmentMissing).map(Fr::from))?;
-        let b = cs.new_witness_variable(|| self.b.ok_or(SynthesisError::AssignmentMissing).map(Fr::from))?;
-        cs.enforce_constraint(a.into(), ark_relations::r1cs::Variable::One.into(), b.into())?;
+        // Allocate witnesses for a and b as field elements
+        let a_var = FpVar::<Fr>::new_witness(cs.clone(), || {
+            self.a.map(Fr::from).ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let b_var = FpVar::<Fr>::new_witness(cs.clone(), || {
+            self.b.map(Fr::from).ok_or(SynthesisError::AssignmentMissing)
+        })?;
 
-        // ------------------------------------------------------------------
-        // Commitment equality check
-        // ------------------------------------------------------------------
-        // Instead of computing SHA-256 inside the circuit, we simply treat the
-        // provided commitment as both a witness and a public input and enforce
-        // their equality. This is sufficient for the example and prevents the
-        // `AssignmentMissing` panic that occurred during setup.
+        // Enforce a == b
+        a_var.enforce_equal(&b_var)?;
 
-        let hash_input_bytes = self
+        // Convert 'a' to little-endian bits and constrain higher bits to zero (only 64-bit used)
+        let mut a_bits_le = a_var.to_bits_le()?; // length ~= 254
+        // Keep exactly 64 LSBs for hashing input
+        let a_bits_le_64: Vec<Boolean<Fr>> = a_bits_le.drain(0..64).collect();
+        // Remaining higher bits must be zero to represent a 64-bit integer faithfully
+        for bit in a_bits_le.into_iter() {
+            bit.enforce_equal(&Boolean::FALSE())?;
+        }
+
+        // Build 8 LE bytes from the 64 LSBits
+        let mut a_bytes_le: Vec<UInt8<Fr>> = Vec::with_capacity(8);
+        for chunk in a_bits_le_64.chunks(8) {
+            a_bytes_le.push(UInt8::<Fr>::from_bits_le(chunk));
+        }
+
+        // Compute SHA-256 over the 8-byte LE encoding of 'a'
+        let digest_bytes = <Sha256Gadget as CRHSchemeGadget<sha256::CRH, Fr>>::evaluate(
+            &UnitVar::default(),
+            &a_bytes_le,
+        )?; // 32 bytes
+
+        // Public input: expected 32-byte commitment
+        let expected_commitment = self
             .hash_input
-            .ok_or(SynthesisError::AssignmentMissing)?;
+            .ok_or(SynthesisError::AssignmentMissing)?
+            .to_vec();
+        let expected_commitment_bytes = UInt8::<Fr>::new_input_vec(cs.clone(), || Ok(expected_commitment))?;
 
-        let hash_input_fr = Fr::from_le_bytes_mod_order(&hash_input_bytes);
-        let hash_input_var = cs.new_input_variable(|| Ok(hash_input_fr))?;
-
-        // Witness version of the same commitment
-        let hash_witness_var = cs.new_witness_variable(|| Ok(hash_input_fr))?;
-
-        // Enforce witness_commitment == public_commitment
-        cs.enforce_constraint(
-            hash_witness_var.into(),
-            ark_relations::r1cs::Variable::One.into(),
-            hash_input_var.into(),
-        )?;
+        // Enforce digest == expected_commitment (byte-wise)
+        for (d, e) in digest_bytes.iter().zip(expected_commitment_bytes.iter()) {
+            d.enforce_equal(e)?;
+        }
 
         Ok(())
     }

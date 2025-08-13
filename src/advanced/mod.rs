@@ -106,7 +106,10 @@ pub fn prove_range_cached(value: u64, min: u64, max: u64) -> PyResult<Vec<u8>> {
         return Ok(cached);
     }
 
+    let mut timer = Timer::new();
     let proof = crate::proof::range_proof::prove_range(value, min, max)?;
+    let elapsed = timer.elapsed();
+    crate::utils::performance::record_operation_metric("range_proof", elapsed);
     cache.put(cache_key, proof.clone());
     Ok(proof)
 }
@@ -118,10 +121,10 @@ pub fn prove_equality_advanced(val1: u64, val2: u64, context: Option<Vec<u8>>) -
         return Err(ZkpError::InvalidInput("values must be equal".to_string()).into());
     }
 
-    let mut proof = crate::proof::equality_proof::prove_equality(val1, val2)?;
-    if let Some(ctx) = context {
-        proof.extend_from_slice(&ctx);
-    }
+    // Note: To avoid corrupting the serialized proof format, we do not append context
+    // bytes directly. If metadata is needed, use `create_proof_with_metadata`.
+    let proof = crate::proof::equality_proof::prove_equality(val1, val2)?;
+    let _ = context; // currently unused to preserve proof integrity
     Ok(proof)
 }
 
@@ -152,7 +155,20 @@ pub fn benchmark_proof_generation(py: Python, proof_type: String, iterations: u3
         };
         
         if result.is_ok() {
-            let elapsed_ms = timer.elapsed().as_secs_f64() * 1000.0;
+            let elapsed = timer.elapsed();
+            // Record per-operation timing
+            let op = match proof_type.as_str() { 
+                "range" => "range_proof",
+                "equality" => "equality_proof",
+                "threshold" => "threshold_proof",
+                "membership" => "membership_proof",
+                "improvement" => "improvement_proof",
+                "consistency" => "consistency_proof",
+                _ => "unknown",
+            };
+            crate::utils::performance::record_operation_metric(op, elapsed);
+
+            let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
             times_ms.push(elapsed_ms);
             successful_iterations += 1;
         }
