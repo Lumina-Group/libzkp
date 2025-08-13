@@ -91,7 +91,7 @@ impl<T, E> WithContext<T, E> for Result<T, E> {
 
 pub type ZkpResult<T> = Result<T, ZkpError>;
 
-// Enhanced validation functions with better error messages
+// validation functions with better error messages
 pub fn validate_range(min: u64, max: u64) -> ZkpResult<()> {
     if min > max {
         return Err(ZkpError::InvalidInput(

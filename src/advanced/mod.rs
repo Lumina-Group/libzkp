@@ -29,19 +29,70 @@ pub fn get_cache_stats() -> PyResult<HashMap<String, u64>> {
     Ok(stats)
 }
 
-/// Enable performance monitoring (placeholder)
+/// Enable performance monitoring globally
 #[pyfunction]
 pub fn enable_performance_monitoring() -> PyResult<bool> {
+    // Initialize the global metrics collector by calling it once
+    crate::utils::performance::get_global_metrics();
+    
+    // Set up cache hit/miss recording for future operations
+    // This would be used in actual proof operations to record metrics
+    
     Ok(true)
 }
 
-/// Get performance metrics (placeholder values)
-#[pyfunction]
+/// Get performance metrics from the global metrics collector
+#[pyfunction] 
 pub fn get_performance_metrics() -> PyResult<HashMap<String, f64>> {
-    let mut metrics = HashMap::new();
-    metrics.insert("cache_hit_rate".to_string(), 0.85);
-    metrics.insert("avg_proof_time_ms".to_string(), 125.5);
-    Ok(metrics)
+    use crate::utils::performance::{get_global_cache, get_global_metrics};
+    
+    let cache = get_global_cache();
+    let metrics_arc = get_global_metrics();
+    
+    let mut result = HashMap::new();
+    
+    if let Ok(metrics) = metrics_arc.lock() {
+        // Cache metrics
+        result.insert("cache_hit_rate".to_string(), metrics.get_cache_hit_rate());
+        result.insert("cache_size".to_string(), cache.size() as f64);
+        result.insert("cache_hits".to_string(), metrics.cache_hits as f64);
+        result.insert("cache_misses".to_string(), metrics.cache_misses as f64);
+        
+        // Average proof times by operation
+        if let Some(avg_time) = metrics.get_average_time("range_proof") {
+            result.insert("avg_range_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        if let Some(avg_time) = metrics.get_average_time("equality_proof") {
+            result.insert("avg_equality_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        if let Some(avg_time) = metrics.get_average_time("threshold_proof") {
+            result.insert("avg_threshold_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        if let Some(avg_time) = metrics.get_average_time("membership_proof") {
+            result.insert("avg_membership_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        if let Some(avg_time) = metrics.get_average_time("improvement_proof") {
+            result.insert("avg_improvement_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        if let Some(avg_time) = metrics.get_average_time("consistency_proof") {
+            result.insert("avg_consistency_proof_time_ms".to_string(), avg_time.as_millis() as f64);
+        }
+        
+        // Operation counts
+        for (operation, count) in &metrics.operation_counts {
+            result.insert(format!("{}_count", operation), *count as f64);
+        }
+        
+        // Total operations
+        let total_operations: u64 = metrics.operation_counts.values().sum();
+        result.insert("total_operations".to_string(), total_operations as f64);
+    } else {
+        // Fallback values if mutex is poisoned
+        result.insert("cache_hit_rate".to_string(), 0.0);
+        result.insert("cache_size".to_string(), cache.size() as f64);
+    }
+    
+    Ok(result)
 }
 
 /// Range proof with caching support

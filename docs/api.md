@@ -55,12 +55,22 @@ proof = libzkp.prove_range(25, 18, 65)
 **例外:**
 - `ValueError`: val1 != val2 の場合
 
-#### `verify_equality(proof: bytes, commitment: bytes) -> bool`
+#### `verify_equality(proof: bytes, val1: int, val2: int) -> bool`
 等価性証明を検証します。
 
 **パラメータ:**
 - `proof`: 証明データ
-- `commitment`: 期待されるコミットメント（SHA256ハッシュ）
+- `val1`: 1つ目の値
+- `val2`: 2つ目の値
+
+**戻り値:** 証明が有効な場合 True
+
+#### `verify_equality_with_commitment(proof: bytes, expected_commitment: bytes) -> bool`
+コミットメント（32バイト）を明示的に指定して等価性証明を検証します。
+
+**パラメータ:**
+- `proof`: 証明データ
+- `expected_commitment`: 期待される32バイトのコミットメント（SHA256）
 
 **戻り値:** 証明が有効な場合 True
 
@@ -76,8 +86,7 @@ proof = libzkp.prove_range(25, 18, 65)
 **戻り値:** 証明データ
 
 **例外:**
-- `ValueError`: 合計が閾値未満の場合
-- `OverflowError`: 整数オーバーフローが発生した場合
+- `ValueError`: 合計が閾値未満、または内部計算に問題がある場合
 
 #### `verify_threshold(proof: bytes, threshold: int) -> bool`
 しきい値証明を検証します。
@@ -222,20 +231,20 @@ proof = libzkp.prove_range(25, 18, 65)
 
 ### パフォーマンス監視
 
-#### `enable_performance_monitoring(enabled: bool) -> None`
-パフォーマンス監視を有効/無効にします。
+#### `enable_performance_monitoring() -> bool`
+パフォーマンス監視（メトリクス収集器）を初期化します。成功時に True を返します。
 
 #### `get_performance_metrics() -> Dict[str, float]`
 パフォーマンスメトリクスを取得します。
 
-#### `benchmark_proof_generation(proof_type: str, iterations: int) -> Dict[str, float]`
+#### `benchmark_proof_generation(proof_type: str, iterations: int) -> Dict[str, str]`
 証明生成のベンチマークを実行します。
 
 **パラメータ:**
 - `proof_type`: 証明タイプ（"range", "equality", "threshold", "membership", "improvement", "consistency"）
 - `iterations`: 繰り返し回数
 
-**戻り値:**
+**戻り値:** すべて文字列として返されます（必要に応じて `float(...)` で変換してください）。
 - `proof_type`: テストされた証明タイプ
 - `iterations`: 要求された繰り返し回数
 - `successful_iterations`: 成功した繰り返し回数
@@ -273,7 +282,7 @@ proof = libzkp.prove_range(25, 18, 65)
 **戻り値:**
 - `version`: 証明のバージョン
 - `scheme`: 証明スキームID
-- `size`: 証明サイズ（バイト）
+- `proof_size`: 証明サイズ（バイト）
 - `commitment_size`: コミットメントサイズ
 
 ### 証明チェーン検証

@@ -89,12 +89,46 @@ impl ProofCache {
 static mut GLOBAL_CACHE: Option<ProofCache> = None;
 static CACHE_INIT: std::sync::Once = std::sync::Once::new();
 
+/// Global performance metrics instance
+static mut GLOBAL_METRICS: Option<Arc<Mutex<PerformanceMetrics>>> = None;
+static METRICS_INIT: std::sync::Once = std::sync::Once::new();
+
 pub fn get_global_cache() -> &'static ProofCache {
     unsafe {
         CACHE_INIT.call_once(|| {
             GLOBAL_CACHE = Some(ProofCache::new(1000, 3600)); // 1000 entries, 1 hour TTL
         });
         GLOBAL_CACHE.as_ref().unwrap()
+    }
+}
+
+pub fn get_global_metrics() -> Arc<Mutex<PerformanceMetrics>> {
+    unsafe {
+        METRICS_INIT.call_once(|| {
+            GLOBAL_METRICS = Some(Arc::new(Mutex::new(PerformanceMetrics::new())));
+        });
+        GLOBAL_METRICS.as_ref().unwrap().clone()
+    }
+}
+
+/// Record a performance metric in the global collector
+pub fn record_operation_metric(operation: &str, duration: Duration) {
+    if let Ok(mut m) = get_global_metrics().lock() {
+        m.record_operation(operation, duration);
+    }
+}
+
+/// Record cache hit in global metrics
+pub fn record_global_cache_hit() {
+    if let Ok(mut m) = get_global_metrics().lock() {
+        m.record_cache_hit();
+    }
+}
+
+/// Record cache miss in global metrics
+pub fn record_global_cache_miss() {
+    if let Ok(mut m) = get_global_metrics().lock() {
+        m.record_cache_miss();
     }
 }
 

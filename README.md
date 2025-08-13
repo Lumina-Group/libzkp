@@ -98,8 +98,11 @@ assert libzkp.verify_range(proof, 0, 20)
 
 # 等価性証明: 2つの値が等しいことを証明
 proof = libzkp.prove_equality(5, 5)
+# 値による検証
+assert libzkp.verify_equality(proof, 5, 5)
+# コミットメント指定による検証（32バイト）
 commit = hashlib.sha256((5).to_bytes(8, 'little')).digest()
-assert libzkp.verify_equality(proof, commit)
+assert libzkp.verify_equality_with_commitment(proof, commit)
 
 # しきい値証明: 値の合計が閾値以上であることを証明
 proof = libzkp.prove_threshold([1, 2, 3], 5)
@@ -147,8 +150,8 @@ results = libzkp.verify_proofs_parallel(proofs)
 
 # パフォーマンスベンチマーク
 metrics = libzkp.benchmark_proof_generation("range", 100)
-print(f"平均時間: {metrics['avg_time_ms']:.2f}ms")
-print(f"スループット: {metrics['proofs_per_second']:.2f} proofs/sec")
+print(f"平均時間: {float(metrics['avg_time_ms']):.2f}ms")
+print(f"スループット: {float(metrics['proofs_per_second']):.2f} proofs/sec")
 ```
 
 #### メタデータ付き証明

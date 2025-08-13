@@ -18,7 +18,8 @@
 | `prove_range(value, min, max)` | `min` 以上 `max` 以下に値が存在することを示す範囲証明を生成します。 | Bulletproofs |
 | `verify_range(proof, min, max)` | 範囲証明を検証します。 | Bulletproofs |
 | `prove_equality(val1, val2)` | 2 つの値が等しいことを示す証明を生成します。 | SNARK |
-| `verify_equality(proof, commitment)` | 等価性証明を検証します。 | SNARK |
+| `verify_equality(proof, val1, val2)` | 等価性証明を値を用いて検証します。 | SNARK |
+| `verify_equality_with_commitment(proof, expected_commitment)` | 期待コミットメント（32バイト）を用いて検証します。 | SNARK |
 | `prove_threshold(values, threshold)` | `values` の総和が `threshold` 以上であることを示す証明を生成します。 | Bulletproofs |
 | `verify_threshold(proof, threshold)` | しきい値証明を検証します。 | Bulletproofs |
 | `prove_membership(value, set)` | 値が集合 `set` に含まれることを示す証明を生成します。 | Bulletproofs |
@@ -45,9 +46,11 @@
 | 関数名 | 説明 |
 | --- | --- |
 | `prove_range_cached(value, min, max)` | キャッシュを使用した範囲証明の生成。 |
+| `clear_cache()` | グローバルキャッシュをクリアします。 |
+| `get_cache_stats()` | キャッシュ統計（`size`）を返します。 |
 | `verify_proofs_parallel(proofs)` | 複数の証明を並列で検証します。 |
 | `benchmark_proof_generation(proof_type, iterations)` | 証明生成のベンチマークを実行します。 |
-| `enable_performance_monitoring(enabled)` | パフォーマンス監視を有効/無効にします。 |
+| `enable_performance_monitoring()` | パフォーマンス監視を初期化します。 |
 | `get_performance_metrics()` | パフォーマンスメトリクスを取得します。 |
 
 #### 複合証明とメタデータ
@@ -87,11 +90,6 @@ Rust のテスト:
 cargo test
 ```
 
-Python のテスト:
-```bash
-python test_improvements.py
-```
-
 ## アーキテクチャ
 
 ### ディレクトリ構造
@@ -102,14 +100,28 @@ libzkp/
 │   │   ├── bulletproofs.rs
 │   │   ├── snark.rs
 │   │   └── stark.rs
-│   ├── utils/           # ユーティリティ
+│   ├── proof/            # 各証明の実装
+│   │   ├── range_proof.rs
+│   │   ├── equality_proof.rs
+│   │   ├── threshold_proof.rs
+│   │   ├── set_membership.rs
+│   │   ├── improvement_proof.rs
+│   │   └── consistency_proof.rs
+│   ├── advanced/         # 複合・バッチ・拡張API
+│   │   ├── composite.rs
+│   │   └── batch.rs
+│   ├── utils/            # ユーティリティ
+│   │   ├── commitment.rs
+│   │   ├── composition.rs
 │   │   ├── error_handling.rs
 │   │   ├── performance.rs
+│   │   ├── proof_helpers.rs
+│   │   ├── serialization.rs
 │   │   └── validation.rs
-│   └── *.rs            # 各証明タイプの実装
-├── docs/               # ドキュメント
-├── examples/           # サンプルコード
-└── tests/             # テストコード
+│   └── lib.rs
+├── docs/                 # ドキュメント
+├── README.md
+└── Cargo.toml
 ```
 
 ### エラーハンドリング
@@ -119,7 +131,12 @@ libzkpは以下のエラータイプを提供します：
 - `InvalidInput`: 無効な入力パラメータ
 - `ProofGenerationFailed`: 証明生成の失敗
 - `VerificationFailed`: 検証の失敗
-- `IntegerOverflow`: 整数オーバーフロー
+- `InvalidProofFormat`: 無効な証明フォーマット
 - `BackendError`: バックエンドエラー
+- `SerializationError`: シリアライズ/デシリアライズ失敗
+- `ValidationError`: 入力検証エラー
+- `IntegerOverflow`: 整数オーバーフロー
+- `CryptoError`: 暗号処理の失敗
+- `ConfigError`: 設定値の不正
 
 詳細なAPIリファレンスは[api.md](api.md)を参照してください。

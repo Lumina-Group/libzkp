@@ -39,7 +39,7 @@ libzkpへの貢献を検討していただき、ありがとうございます�
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/yourusername/libzkp.git
+git clone https://github.com/Lumina-Group/libzkp.git
 cd libzkp
 
 # 開発用ブランチを作成

@@ -10,6 +10,7 @@ fn libzkp(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(proof::range_proof::verify_range, m)?)?;
     m.add_function(wrap_pyfunction!(proof::equality_proof::prove_equality, m)?)?;
     m.add_function(wrap_pyfunction!(proof::equality_proof::verify_equality, m)?)?;
+    m.add_function(wrap_pyfunction!(proof::equality_proof::verify_equality_with_commitment, m)?)?;
     m.add_function(wrap_pyfunction!(proof::threshold_proof::prove_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(proof::threshold_proof::verify_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(proof::set_membership::prove_membership, m)?)?;
