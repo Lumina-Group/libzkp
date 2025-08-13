@@ -22,8 +22,8 @@
 | `verify_equality_with_commitment(proof, expected_commitment)` | 期待コミットメント（32バイト）を用いて検証します。 | SNARK |
 | `prove_threshold(values, threshold)` | `values` の総和が `threshold` 以上であることを示す証明を生成します。 | Bulletproofs |
 | `verify_threshold(proof, threshold)` | しきい値証明を検証します。 | Bulletproofs |
-| `prove_membership(value, set)` | 値が集合 `set` に含まれることを示す証明を生成します。 | Bulletproofs |
-| `verify_membership(proof, set)` | 集合所属証明を検証します。 | Bulletproofs |
+| `prove_membership(value, set)` | 値が集合 `set` に含まれることを、値とインデックスを秘匿したまま証明します。 | SNARK |
+| `verify_membership(proof, set)` | 集合所属証明を検証します。 | SNARK |
 | `prove_improvement(old, new)` | `old` から `new` へ値が増加したことを示す証明を生成します。 | STARK |
 | `verify_improvement(proof, old)` | 向上証明を検証します。 | STARK |
 | `prove_consistency(data)` | 昇順に並んだデータ列であることを示す整合性証明を生成します。 | Bulletproofs |

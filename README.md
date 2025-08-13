@@ -29,7 +29,7 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 | **範囲証明** (Range Proof) | 値が指定された範囲内にあることを証明 | 年齢証明、残高証明 | Bulletproofs |
 | **等価性証明** (Equality Proof) | 2つの値が等しいことを証明 | 身元確認、データ整合性 | SNARK (Groth16) |
 | **しきい値証明** (Threshold Proof) | 値の合計が閾値以上であることを証明 | 投票システム、資産証明 | Bulletproofs |
-| **集合所属証明** (Set Membership Proof) | 値が特定の集合に含まれることを証明 | ホワイトリスト、権限管理 | Pedersenコミットメント＋整合検証 |
+| **集合所属証明** (Set Membership Proof) | 値が特定の集合に含まれることを、値とインデックスを秘匿したまま証明 | ホワイトリスト、権限管理 | SNARK (Groth16) |
 | **向上証明** (Improvement Proof) | 値が増加したことを証明 | 成績向上、パフォーマンス改善 | STARK |
 | **整合性証明** (Consistency Proof) | データが昇順に並んでいることを証明 | データ検証、監査 | Bulletproofs |
 

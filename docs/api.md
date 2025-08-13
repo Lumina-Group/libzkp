@@ -103,20 +103,24 @@ is_valid = libzkp.verify_equality_with_commitment(proof, expected_commitment)
 
 ### 集合所属証明 (Set Membership Proof)
 
+SNARK（Groth16）により、値とインデックスを秘匿したまま「値が集合 set のいずれかに等しい」ことを証明します。集合サイズは最大64まで対応（それを超える場合は内部で0埋めパディング）。コミットメントは `SHA-256(value.to_le_bytes(8))` を公開入力として検証します。
+
 #### `prove_membership(value: int, set: List[int]) -> bytes`
-値が集合に含まれることを証明します。
+値が集合に含まれることを零知識で証明する証明を生成します（値・インデックスは非公開）。
 
 **パラメータ:**
 - `value`: 証明する値
-- `set`: 値の集合
+- `set`: 値の集合（最大64要素、重複不可）
 
 **戻り値:** 証明データ
 
 **例外:**
-- `ValueError`: 値が集合に含まれない場合
+- `ValueError`: 空集合、または値が集合に含まれない場合
 
 #### `verify_membership(proof: bytes, set: List[int]) -> bool`
-集合所属証明を検証します。
+集合所属証明を検証します（公開入力は `set` と `SHA-256(value)` に対応）。
+
+注意: 証明バイト列には検証のための最小限のセット情報が埋め込まれます（サイズと内容）。検証時に渡した `set` と一致するかをチェックした上で、SNARK検証を行います。値と一致インデックスは秘匿されます。
 
 ### 向上証明 (Improvement Proof)
 
