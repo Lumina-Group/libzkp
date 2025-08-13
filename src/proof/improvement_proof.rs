@@ -49,8 +49,17 @@ pub fn verify_improvement(proof: Vec<u8>, old: u64) -> PyResult<bool> {
         return Ok(false);
     }
 
-    let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
-    let new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
+    if proof.commitment.len() != 16 {
+        return Ok(false);
+    }
+    let diff = match proof.commitment[0..8].try_into() {
+        Ok(arr) => u64::from_le_bytes(arr),
+        Err(_) => return Ok(false),
+    };
+    let new = match proof.commitment[8..16].try_into() {
+        Ok(arr) => u64::from_le_bytes(arr),
+        Err(_) => return Ok(false),
+    };
 
     if diff == 0 {
         return Ok(false);

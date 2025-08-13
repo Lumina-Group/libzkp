@@ -212,8 +212,14 @@ impl ZkpBackend for StarkBackend {
             return vec![];
         }
         
-        let old = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let new = u64::from_le_bytes(data[8..16].try_into().unwrap());
+        let old = match data[0..8].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return vec![],
+        };
+        let new = match data[8..16].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return vec![],
+        };
         
         match Self::prove_improvement(old, new) {
             Ok(proof) => proof,
@@ -226,8 +232,14 @@ impl ZkpBackend for StarkBackend {
             return false;
         }
         
-        let old = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let new = u64::from_le_bytes(data[8..16].try_into().unwrap());
+        let old = match data[0..8].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return false,
+        };
+        let new = match data[8..16].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return false,
+        };
         
         Self::verify_improvement(proof, old, new).unwrap_or(false)
     }

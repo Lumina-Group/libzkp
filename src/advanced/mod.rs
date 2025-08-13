@@ -95,6 +95,69 @@ pub fn get_performance_metrics() -> PyResult<HashMap<String, f64>> {
     Ok(result)
 }
 
+/// Numeric benchmark result for easier consumption from Python
+#[pyfunction]
+pub fn benchmark_proof_generation_numeric(proof_type: String, iterations: u32) -> PyResult<HashMap<String, f64>> {
+    let mut timer = Timer::new();
+    let mut times_ms = Vec::new();
+    let mut successful_iterations = 0u32;
+
+    for _ in 0..iterations {
+        timer.reset();
+        let result = match proof_type.as_str() {
+            "range" => crate::proof::range_proof::prove_range(50, 0, 100),
+            "equality" => crate::proof::equality_proof::prove_equality(42, 42),
+            "threshold" => crate::proof::threshold_proof::prove_threshold(vec![10, 20, 30, 40], 50),
+            "membership" => crate::proof::set_membership::prove_membership(25, vec![10, 20, 25, 30, 40]),
+            "improvement" => crate::proof::improvement_proof::prove_improvement(30, 50),
+            "consistency" => crate::proof::consistency_proof::prove_consistency(vec![10, 20, 30, 40, 50]),
+            _ => return Err(ZkpError::InvalidInput(format!("unsupported proof type: {}", proof_type)).into()),
+        };
+
+        if result.is_ok() {
+            let elapsed = timer.elapsed();
+            let op = match proof_type.as_str() { 
+                "range" => "range_proof",
+                "equality" => "equality_proof",
+                "threshold" => "threshold_proof",
+                "membership" => "membership_proof",
+                "improvement" => "improvement_proof",
+                "consistency" => "consistency_proof",
+                _ => "unknown",
+            };
+            crate::utils::performance::record_operation_metric(op, elapsed);
+
+            let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
+            times_ms.push(elapsed_ms);
+            successful_iterations += 1;
+        }
+    }
+
+    if successful_iterations == 0 {
+        return Err(ZkpError::InvalidInput("no successful proof generations".to_string()).into());
+    }
+
+    let total_time_ms: f64 = times_ms.iter().sum();
+    let avg_time_ms = total_time_ms / successful_iterations as f64;
+    let min_time_ms = times_ms.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    let max_time_ms = times_ms.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+    let variance = times_ms.iter().map(|&x| (x - avg_time_ms).powi(2)).sum::<f64>() / successful_iterations as f64;
+    let std_dev_ms = variance.sqrt();
+
+    let mut out = HashMap::new();
+    out.insert("iterations".to_string(), iterations as f64);
+    out.insert("successful_iterations".to_string(), successful_iterations as f64);
+    out.insert("success_rate".to_string(), (successful_iterations as f64 / iterations as f64) * 100.0);
+    out.insert("total_time_ms".to_string(), total_time_ms);
+    out.insert("avg_time_ms".to_string(), avg_time_ms);
+    out.insert("min_time_ms".to_string(), min_time_ms);
+    out.insert("max_time_ms".to_string(), max_time_ms);
+    out.insert("std_dev_ms".to_string(), std_dev_ms);
+    out.insert("proofs_per_second".to_string(), successful_iterations as f64 / (total_time_ms / 1000.0));
+    out.insert("throughput_ms_per_proof".to_string(), total_time_ms / successful_iterations as f64);
+    Ok(out)
+}
+
 /// Range proof with caching support
 #[pyfunction]
 pub fn prove_range_cached(value: u64, min: u64, max: u64) -> PyResult<Vec<u8>> {

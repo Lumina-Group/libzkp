@@ -69,16 +69,16 @@ impl ConstraintSynthesizer<Fr> for EqualityCircuit {
 
 pub struct SnarkBackend;
 
-static UNIVERSAL_SETUP: OnceLock<(
+static UNIVERSAL_SETUP: OnceLock<Result<(
     ark_groth16::ProvingKey<Bn254>,
     ark_groth16::VerifyingKey<Bn254>,
-)> = OnceLock::new();
+), String>> = OnceLock::new();
 
 impl SnarkBackend {
-    fn get_universal_setup() -> &'static (
+    fn get_universal_setup() -> &'static Result<(
         ark_groth16::ProvingKey<Bn254>,
         ark_groth16::VerifyingKey<Bn254>,
-    ) {
+    ), String> {
         UNIVERSAL_SETUP.get_or_init(|| {
             let rng = &mut OsRng;
             let dummy_circuit = EqualityCircuit {
@@ -86,7 +86,8 @@ impl SnarkBackend {
                 b: Some(0),
                 hash_input: Some([0; 32]),
             };
-            Groth16::<Bn254>::circuit_specific_setup(dummy_circuit, rng).expect("setup failed")
+            Groth16::<Bn254>::circuit_specific_setup(dummy_circuit, rng)
+                .map_err(|e| format!("setup failed: {:?}", e))
         })
     }
 
@@ -101,7 +102,10 @@ impl SnarkBackend {
             hash_input: Some(hash_input),
         };
 
-        let setup = Self::get_universal_setup();
+        let setup = match Self::get_universal_setup() {
+            Ok(pair) => pair,
+            Err(_) => return vec![],
+        };
         let rng = &mut OsRng;
         let proof = match Groth16::<Bn254>::prove(&setup.0, circuit, rng) {
             Ok(p) => p,
@@ -121,7 +125,10 @@ impl SnarkBackend {
             Err(_) => return false,
         };
 
-        let setup = Self::get_universal_setup();
+        let setup = match Self::get_universal_setup() {
+            Ok(pair) => pair,
+            Err(_) => return false,
+        };
         let pvk = match Groth16::<Bn254>::process_vk(&setup.1) {
             Ok(pvk) => pvk,
             Err(_) => return false,

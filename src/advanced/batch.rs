@@ -19,11 +19,15 @@ lazy_static! {
 /// Create a new proof batch and return its identifier
 #[pyfunction]
 pub fn create_proof_batch() -> PyResult<usize> {
-    let mut counter = BATCH_COUNTER.lock().unwrap();
+    let mut counter = BATCH_COUNTER
+        .lock()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch counter lock poisoned"))?;
     let batch_id = *counter;
     *counter += 1;
 
-    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let mut registry = BATCH_REGISTRY
+        .lock()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch registry lock poisoned"))?;
     registry.insert(batch_id, ProofBatch::new());
 
     Ok(batch_id)
@@ -34,7 +38,9 @@ fn with_batch_mut<F>(batch_id: usize, f: F) -> PyResult<()>
 where
     F: FnOnce(&mut ProofBatch),
 {
-    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let mut registry = BATCH_REGISTRY
+        .lock()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch registry lock poisoned"))?;
     let batch = registry
         .get_mut(&batch_id)
         .ok_or_else(|| PyErr::from(ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id))))?;
@@ -94,7 +100,9 @@ pub fn batch_add_consistency_proof(batch_id: usize, data: Vec<u64>) -> PyResult<
 #[pyfunction]
 pub fn process_batch(batch_id: usize) -> PyResult<Vec<Vec<u8>>> {
     let batch = {
-        let mut registry = BATCH_REGISTRY.lock().unwrap();
+        let mut registry = BATCH_REGISTRY
+            .lock()
+            .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch registry lock poisoned"))?;
         registry
             .remove(&batch_id)
             .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?
@@ -111,7 +119,9 @@ pub fn process_batch(batch_id: usize) -> PyResult<Vec<Vec<u8>>> {
 /// Retrieve statistics about a batch such as counts per operation type
 #[pyfunction]
 pub fn get_batch_status(batch_id: usize) -> PyResult<HashMap<String, usize>> {
-    let registry = BATCH_REGISTRY.lock().unwrap();
+    let registry = BATCH_REGISTRY
+        .lock()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch registry lock poisoned"))?;
     let batch = registry
         .get(&batch_id)
         .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?;
@@ -144,7 +154,9 @@ pub fn get_batch_status(batch_id: usize) -> PyResult<HashMap<String, usize>> {
 /// Remove a batch and release its resources
 #[pyfunction]
 pub fn clear_batch(batch_id: usize) -> PyResult<()> {
-    let mut registry = BATCH_REGISTRY.lock().unwrap();
+    let mut registry = BATCH_REGISTRY
+        .lock()
+        .map_err(|_| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("batch registry lock poisoned"))?;
     registry.remove(&batch_id);
     Ok(())
 }

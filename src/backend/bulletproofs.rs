@@ -105,8 +105,14 @@ impl BulletproofsBackend {
         if reader.len() < 16 {
             return false;
         }
-        let proof_min = u64::from_le_bytes(reader[0..8].try_into().unwrap());
-        let proof_max = u64::from_le_bytes(reader[8..16].try_into().unwrap());
+        let proof_min = match reader[0..8].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return false,
+        };
+        let proof_max = match reader[8..16].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return false,
+        };
         if proof_min != min || proof_max != max {
             return false;
         }
@@ -115,7 +121,10 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let rp_min_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+        let rp_min_len = match reader[0..4].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return false,
+        };
         reader = &reader[4..];
         
         if reader.len() < rp_min_len {
@@ -131,7 +140,10 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let rp_max_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+        let rp_max_len = match reader[0..4].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return false,
+        };
         reader = &reader[4..];
         
         if reader.len() < rp_max_len {
@@ -333,7 +345,10 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let num_values = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+        let num_values = match reader[0..4].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return false,
+        };
         reader = &reader[4..];
         
         if num_values == 0 {
@@ -371,7 +386,10 @@ impl BulletproofsBackend {
             if reader.len() < 4 {
                 return false;
             }
-            let rp_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+            let rp_len = match reader[0..4].try_into() {
+                Ok(arr) => u32::from_le_bytes(arr) as usize,
+                Err(_) => return false,
+            };
             reader = &reader[4..];
             
             if reader.len() < rp_len {
@@ -403,7 +421,10 @@ impl BulletproofsBackend {
                 return false;
             }
             
-            let expected_diff = commit_i.unwrap() - commit_prev.unwrap();
+            let expected_diff = match (commit_i, commit_prev) {
+                (Some(ci), Some(cp)) => ci - cp,
+                _ => return false,
+            };
             if expected_diff.compress() != diff_commit {
                 return false;
             }
@@ -439,7 +460,10 @@ impl BulletproofsBackend {
         let set_vec: Vec<u64> = set.into_iter().collect();
         let mut transcript = Transcript::new(b"libzkp_membership");
         
-        let value_index = set_vec.iter().position(|&x| x == value).unwrap();
+        let value_index = match set_vec.iter().position(|&x| x == value) {
+            Some(i) => i,
+            None => return Err("value not in set".to_string()),
+        };
         
         let mut index_blinding_bytes = [0u8; 32];
         rng.fill_bytes(&mut index_blinding_bytes);
@@ -509,7 +533,10 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let set_size = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+        let set_size = match reader[0..4].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return false,
+        };
         reader = &reader[4..];
         
         if set_size == 0 || set_size != set.len() {
@@ -521,7 +548,10 @@ impl BulletproofsBackend {
         }
         let mut proof_set = Vec::with_capacity(set_size);
         for _ in 0..set_size {
-            let set_val = u64::from_le_bytes(reader[0..8].try_into().unwrap());
+            let set_val = match reader[0..8].try_into() {
+                Ok(arr) => u64::from_le_bytes(arr),
+                Err(_) => return false,
+            };
             proof_set.push(set_val);
             reader = &reader[8..];
         }
@@ -544,18 +574,24 @@ impl BulletproofsBackend {
         if reader.len() < 32 {
             return false;
         }
-        let challenge = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
+        let challenge = match reader[0..32].try_into() {
+            Ok(arr) => match Scalar::from_canonical_bytes(arr) {
             ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
+                _ => return false,
+            },
+            Err(_) => return false,
         };
         reader = &reader[32..];
         
         if reader.len() < 32 {
             return false;
         }
-        let response = match Scalar::from_canonical_bytes(reader[0..32].try_into().unwrap()) {
+        let response = match reader[0..32].try_into() {
+            Ok(arr) => match Scalar::from_canonical_bytes(arr) {
             ct if ct.is_some().into() => ct.unwrap(),
-            _ => return false,
+                _ => return false,
+            },
+            Err(_) => return false,
         };
         reader = &reader[32..];
         
@@ -620,7 +656,10 @@ impl BulletproofsBackend {
         if reader.len() < 8 {
             return false;
         }
-        let proof_threshold = u64::from_le_bytes(reader[0..8].try_into().unwrap());
+        let proof_threshold = match reader[0..8].try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return false,
+        };
         if proof_threshold != threshold {
             return false;
         }
@@ -629,7 +668,10 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let rp_len = u32::from_le_bytes(reader[0..4].try_into().unwrap()) as usize;
+        let rp_len = match reader[0..4].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return false,
+        };
         reader = &reader[4..];
         
         if reader.len() < rp_len {
@@ -677,7 +719,10 @@ impl BulletproofsBackend {
 impl ZkpBackend for BulletproofsBackend {
     fn prove(data: &[u8]) -> Vec<u8> {
         if data.len() != 8 { return vec![]; }
-        let value = u64::from_le_bytes(data.try_into().ok().unwrap());
+        let value = match data.try_into() {
+            Ok(arr) => u64::from_le_bytes(arr),
+            Err(_) => return vec![],
+        };
 
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 1);

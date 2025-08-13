@@ -26,7 +26,7 @@ impl ProofCache {
     }
     
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = self.cache.lock().ok()?;
         
         if let Some(entry) = cache.get_mut(key) {
             // Check if entry is still valid
@@ -46,7 +46,10 @@ impl ProofCache {
     }
     
     pub fn put(&self, key: String, data: Vec<u8>) {
-        let mut cache = self.cache.lock().unwrap();
+        let mut cache = match self.cache.lock() {
+            Ok(guard) => guard,
+            Err(_) => return, // lock poisoned; skip put
+        };
         
         // If cache is full, remove least recently used entry
         if cache.len() >= self.max_size {
@@ -70,21 +73,24 @@ impl ProofCache {
     }
     
     pub fn clear(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        cache.clear();
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
     }
     
     pub fn size(&self) -> usize {
-        let cache = self.cache.lock().unwrap();
-        cache.len()
+        match self.cache.lock() {
+            Ok(cache) => cache.len(),
+            Err(_) => 0,
+        }
     }
     
     /// Clean up expired entries
     pub fn cleanup(&self) {
-        let mut cache = self.cache.lock().unwrap();
-        let now = Instant::now();
-        
-        cache.retain(|_, entry| now.duration_since(entry.created_at) < self.ttl);
+        if let Ok(mut cache) = self.cache.lock() {
+            let now = Instant::now();
+            cache.retain(|_, entry| now.duration_since(entry.created_at) < self.ttl);
+        }
     }
 }
 
@@ -228,6 +234,29 @@ pub mod parallel {
     use crate::backend::{bulletproofs::BulletproofsBackend, snark::SnarkBackend, stark::StarkBackend};
     use crate::backend::ZkpBackend;
     
+    #[derive(Debug, Clone, Copy)]
+    pub enum ProofKind {
+        Range,
+        Equality,
+        Threshold,
+        Membership,
+        Improvement,
+        Consistency,
+    }
+    
+    impl ProofKind {
+        fn as_str(&self) -> &'static str {
+            match self {
+                ProofKind::Range => "range",
+                ProofKind::Equality => "equality",
+                ProofKind::Threshold => "threshold",
+                ProofKind::Membership => "membership",
+                ProofKind::Improvement => "improvement",
+                ProofKind::Consistency => "consistency",
+            }
+        }
+    }
+    
     /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
         proofs
@@ -355,6 +384,14 @@ pub mod parallel {
         
         Ok(())
     }
+
+    /// Safer variant using internal enum to prevent typo bugs at call sites within Rust
+    pub fn verify_proofs_parallel_internal(proofs: &[(Vec<u8>, ProofKind)]) -> Vec<bool> {
+        proofs
+            .par_iter()
+            .map(|(proof_data, kind)| verify_single_proof(proof_data, kind.as_str()))
+            .collect()
+    }
 }
 
 /// Memory pool for reducing allocations
@@ -377,16 +414,19 @@ impl MemoryPool {
     }
     
     pub fn get_buffer(&self) -> Vec<u8> {
-        let mut buffers = self.buffers.lock().unwrap();
-        buffers.pop().unwrap_or_else(|| Vec::with_capacity(self.buffer_size))
+        match self.buffers.lock() {
+            Ok(mut buffers) => buffers.pop().unwrap_or_else(|| Vec::with_capacity(self.buffer_size)),
+            Err(_) => Vec::with_capacity(self.buffer_size),
+        }
     }
     
     pub fn return_buffer(&self, mut buffer: Vec<u8>) {
         buffer.clear();
         if buffer.capacity() <= self.buffer_size * 2 {
-            let mut buffers = self.buffers.lock().unwrap();
-            if buffers.len() < 100 { // Limit pool size
-                buffers.push(buffer);
+            if let Ok(mut buffers) = self.buffers.lock() {
+                if buffers.len() < 100 { // Limit pool size
+                    buffers.push(buffer);
+                }
             }
         }
     }

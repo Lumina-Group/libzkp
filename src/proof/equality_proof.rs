@@ -1,5 +1,7 @@
 use crate::backend::{snark::SnarkBackend, ZkpBackend};
 use crate::proof::{Proof, PROOF_VERSION};
+use crate::utils::validation::validate_equality_params;
+use crate::utils::error_handling::ZkpError;
 use pyo3::prelude::*;
 use sha2::{Digest, Sha256};
 
@@ -7,11 +9,7 @@ const SCHEME_ID: u8 = 2;
 
 #[pyfunction]
 pub fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
-    if val1 != val2 {
-        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            "values are not equal",
-        ));
-    }
+    validate_equality_params(val1, val2).map_err(PyErr::from)?;
 
     let mut hasher = Sha256::new();
     hasher.update(&val1.to_le_bytes());
@@ -25,9 +23,7 @@ pub fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
     let snark_proof = SnarkBackend::prove(&data);
 
     if snark_proof.is_empty() {
-        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-            "SNARK proof generation failed",
-        ));
+        return Err(PyErr::from(ZkpError::ProofGenerationFailed("SNARK proof generation failed".to_string())));
     }
 
     let proof = Proof::new(SCHEME_ID, snark_proof, commitment);

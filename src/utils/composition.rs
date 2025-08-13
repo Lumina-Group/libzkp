@@ -94,8 +94,14 @@ impl CompositeProof {
             )));
         }
         
-        let num_proofs = u32::from_le_bytes(data[4..8].try_into().unwrap()) as usize;
-        let num_metadata = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        let num_proofs = match data[4..8].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return Err(ZkpError::InvalidProofFormat("invalid proofs count".to_string())),
+        };
+        let num_metadata = match data[8..12].try_into() {
+            Ok(arr) => u32::from_le_bytes(arr) as usize,
+            Err(_) => return Err(ZkpError::InvalidProofFormat("invalid metadata count".to_string())),
+        };
         
         // Validate reasonable limits
         if num_proofs > 1000 || num_metadata > 1000 {
@@ -114,7 +120,10 @@ impl CompositeProof {
                 return Err(ZkpError::InvalidProofFormat("truncated proof length".to_string()));
             }
             
-            let proof_len = u32::from_le_bytes(data[offset..offset+4].try_into().unwrap()) as usize;
+            let proof_len = match data[offset..offset+4].try_into() {
+                Ok(arr) => u32::from_le_bytes(arr) as usize,
+                Err(_) => return Err(ZkpError::InvalidProofFormat("invalid proof length".to_string())),
+            };
             offset += 4;
             
             if offset + proof_len > data.len() {
@@ -138,8 +147,14 @@ impl CompositeProof {
                 )));
             }
             
-            let key_len = u32::from_le_bytes(data[offset..offset+4].try_into().unwrap()) as usize;
-            let value_len = u32::from_le_bytes(data[offset+4..offset+8].try_into().unwrap()) as usize;
+            let key_len = match data[offset..offset+4].try_into() {
+                Ok(arr) => u32::from_le_bytes(arr) as usize,
+                Err(_) => return Err(ZkpError::InvalidProofFormat("invalid metadata key length".to_string())),
+            };
+            let value_len = match data[offset+4..offset+8].try_into() {
+                Ok(arr) => u32::from_le_bytes(arr) as usize,
+                Err(_) => return Err(ZkpError::InvalidProofFormat("invalid metadata value length".to_string())),
+            };
             offset += 8;
             
             // Validate key and value lengths
