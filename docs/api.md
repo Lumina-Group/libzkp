@@ -68,9 +68,19 @@ proof = libzkp.prove_range(25, 18, 65)
 #### `verify_equality_with_commitment(proof: bytes, expected_commitment: bytes) -> bool`
 コミットメント（32バイト）を明示的に指定して等価性証明を検証します。
 
+等価性証明は、`a == b` に加えて、`a` の 64-bit 整数のリトルエンディアン表現（8バイト）に対する `SHA-256` の値が公開入力のコミットメントと一致することを回路内で拘束します。したがって `expected_commitment` は以下のように計算してください。
+
+```python
+import hashlib
+
+val = 42
+expected_commitment = hashlib.sha256(val.to_bytes(8, byteorder="little")).digest()
+is_valid = libzkp.verify_equality_with_commitment(proof, expected_commitment)
+```
+
 **パラメータ:**
 - `proof`: 証明データ
-- `expected_commitment`: 期待される32バイトのコミットメント（SHA256）
+- `expected_commitment`: 期待される32バイトのコミットメント（SHA-256）
 
 **戻り値:** 証明が有効な場合 True
 

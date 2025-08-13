@@ -157,6 +157,8 @@ print(f"スループット: {float(metrics['proofs_per_second']):.2f} proofs/sec
 #### メタデータ付き証明
 
 ```python
+import time
+
 # メタデータを含む証明の作成
 metadata = {
     "purpose": b"identity_verification",
@@ -195,6 +197,7 @@ batch_results = libzkp.process_batch(batch_id)
 
 ```python
 import libzkp
+import time
 
 # 年齢証明（18歳以上であることを年齢を明かさずに証明）
 def prove_adult_age(actual_age):
@@ -217,25 +220,20 @@ def create_kyc_proof(age, balance, country_code):
     """包括的なKYC証明を作成"""
     # バッチ処理で効率的に生成
     batch_id = libzkp.create_proof_batch()
-    
+
     # 年齢証明（18歳以上）
     libzkp.batch_add_range_proof(batch_id, age, 18, 150)
-    
+
     # 残高証明（最低残高以上）
     libzkp.batch_add_range_proof(batch_id, balance, 1000, 10000000)
-    
+
     # 国籍証明（承認された国のリスト）
     approved_countries = [1, 2, 3, 44, 81]  # USA, Canada, France, UK, Japan
-    # 注: 現在のバッチAPIではmembership proofの追加はサポートされていません
-    # 個別に生成する必要があります
-    
-    # バッチ処理
+    libzkp.batch_add_membership_proof(batch_id, country_code, approved_countries)
+
+    # バッチ処理（全証明を生成）
     proofs = libzkp.process_batch(batch_id)
-    
-    # 国籍証明を個別に生成
-    location_proof = libzkp.prove_membership(country_code, approved_countries)
-    proofs.append(location_proof)
-    
+
     # 複合証明の作成
     kyc_proof = libzkp.create_composite_proof(proofs)
     
