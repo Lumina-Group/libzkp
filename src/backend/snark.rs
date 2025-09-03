@@ -264,11 +264,14 @@ impl SnarkBackend {
             return false;
         }
 
-        // Map 32-byte commitment into 32 public field inputs (one per byte)
-        let public_inputs: Vec<Fr> = hash_input
-            .iter()
-            .map(|b| Fr::from(*b as u64))
-            .collect();
+        // Map 32-byte commitment into 256 public field inputs (one per bit, little-endian within each byte)
+        let mut public_inputs: Vec<Fr> = Vec::with_capacity(32 * 8);
+        for byte in hash_input.iter() {
+            for i in 0..8 {
+                let bit = (byte >> i) & 1;
+                public_inputs.push(Fr::from(bit as u64));
+            }
+        }
 
         Groth16::<Bn254>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap_or(false)
     }
@@ -341,11 +344,14 @@ impl SnarkBackend {
             Err(_) => return false,
         };
 
-        // Build public inputs: 32 bytes commitment, K set values, K is_real flags
-        let mut public_inputs: Vec<Fr> = Vec::with_capacity(32 + MAX_SET_SIZE * 2);
-        // commitment bytes
-        for b in commitment {
-            public_inputs.push(Fr::from(*b as u64));
+        // Build public inputs: 256 bits commitment, K set values, K is_real flags
+        let mut public_inputs: Vec<Fr> = Vec::with_capacity(256 + MAX_SET_SIZE * 2);
+        // commitment bits (little-endian per byte)
+        for byte in commitment.iter() {
+            for i in 0..8 {
+                let bit = (byte >> i) & 1;
+                public_inputs.push(Fr::from(bit as u64));
+            }
         }
         // set values (padded)
         for i in 0..MAX_SET_SIZE {
