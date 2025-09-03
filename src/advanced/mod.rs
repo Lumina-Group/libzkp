@@ -276,8 +276,10 @@ pub fn prove_threshold_optimized(values: Vec<u64>, threshold: u64) -> PyResult<V
         return Err(ZkpError::InvalidInput("values cannot be empty".to_string()).into());
     }
 
-    let sum: u64 = values.iter().try_fold(0u64, |acc, &v| acc.checked_add(v).ok_or(()))
-        .map_err(|_| ZkpError::InvalidInput("integer overflow".to_string()))?;
+    let sum: u64 = values
+        .iter()
+        .try_fold(0u64, |acc, &v| acc.checked_add(v).ok_or(()))
+        .map_err(|_| ZkpError::IntegerOverflow("integer overflow in sum calculation".to_string()))?;
 
     if sum < threshold {
         return Err(ZkpError::InvalidInput("sum does not meet threshold".to_string()).into());

@@ -29,7 +29,7 @@ pub fn validate_threshold_params(values: &[u64], threshold: u64) -> ZkpResult<u6
     
     let sum = values.iter().try_fold(0u64, |acc, &val| {
         acc.checked_add(val)
-            .ok_or_else(|| ZkpError::InvalidInput("integer overflow in sum calculation".to_string()))
+            .ok_or_else(|| ZkpError::IntegerOverflow("integer overflow in sum calculation".to_string()))
     })?;
     
     if sum < threshold {

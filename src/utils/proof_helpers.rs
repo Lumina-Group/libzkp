@@ -78,6 +78,6 @@ pub fn is_ascending_order(values: &[u64]) -> bool {
 pub fn safe_sum(values: &[u64]) -> ZkpResult<u64> {
     values.iter().try_fold(0u64, |acc, &val| {
         acc.checked_add(val)
-            .ok_or_else(|| ZkpError::InvalidInput("integer overflow in sum calculation".to_string()))
+            .ok_or_else(|| ZkpError::IntegerOverflow("integer overflow in sum calculation".to_string()))
     })
 }

@@ -3,6 +3,7 @@ use crate::backend::snark::SnarkBackend;
 use crate::proof::Proof;
 use crate::utils::commitment::commit_value;
 use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
+use crate::utils::validation::{validate_set_size, validate_unique_set};
 use pyo3::prelude::*;
 
 const SCHEME_ID: u8 = 4;
@@ -14,6 +15,10 @@ pub fn prove_membership(value: u64, set: Vec<u64>) -> PyResult<Vec<u8>> {
 			"set cannot be empty",
 		));
 	}
+
+	// Enforce constraints: max 64 elements, no duplicates
+	validate_set_size(&set, 64).map_err(PyErr::from)?;
+	validate_unique_set(&set).map_err(PyErr::from)?;
 
 	let commitment = commit_value(value);
 	let commitment_arr: [u8; 32] = commitment

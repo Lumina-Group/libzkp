@@ -7,14 +7,18 @@ use crate::utils::proof_helpers::{
     reconstruct_bulletproofs_proof,
     validate_standard_commitment,
 };
+use crate::utils::validation::validate_threshold_params;
 use pyo3::prelude::*;
 
 const SCHEME_ID: u8 = 3;
 
 #[pyfunction]
 pub fn prove_threshold(values: Vec<u64>, threshold: u64) -> PyResult<Vec<u8>> {
+    // Pre-validate to ensure proper error types (including OverflowError)
+    validate_threshold_params(&values, threshold).map_err(PyErr::from)?;
+
     let backend_proof = BulletproofsBackend::prove_threshold(values, threshold)
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))?;
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)
         .map_err(PyErr::from)?;

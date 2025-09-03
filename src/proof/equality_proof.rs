@@ -47,6 +47,13 @@ pub fn verify_equality(proof: Vec<u8>, val1: u64, val2: u64) -> PyResult<bool> {
 
 #[pyfunction]
 pub fn verify_equality_with_commitment(proof: Vec<u8>, expected_commitment: Vec<u8>) -> PyResult<bool> {
+    // Strict length check: 32 bytes required
+    if expected_commitment.len() != 32 {
+        return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+            "commitment must be 32 bytes",
+        ));
+    }
+
     let proof = match parse_and_validate_proof(&proof, SCHEME_ID) {
         Ok(p) => p,
         Err(_) => return Ok(false),
