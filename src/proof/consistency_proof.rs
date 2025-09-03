@@ -1,6 +1,11 @@
     
 use crate::backend::bulletproofs::BulletproofsBackend;
-use crate::proof::{Proof, PROOF_VERSION};
+use crate::utils::proof_helpers::{
+    extract_bulletproofs_components,
+    create_proof,
+    parse_and_validate_proof,
+    reconstruct_bulletproofs_proof,
+};
 use pyo3::prelude::*;
 
 const SCHEME_ID: u8 = 6;
@@ -9,44 +14,21 @@ const SCHEME_ID: u8 = 6;
 pub fn prove_consistency(data: Vec<u64>) -> PyResult<Vec<u8>> {
     let backend_proof = BulletproofsBackend::prove_consistency(data)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
+
+    let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)
+        .map_err(PyErr::from)?;
     
-    let commit_marker = b"COMMIT:";
-    let commit_pos = backend_proof.windows(commit_marker.len())
-        .position(|window| window == commit_marker)
-        .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-            "invalid backend proof format"
-        ))?;
-    
-    let proof_bytes = &backend_proof[0..commit_pos];
-    let commit_start = commit_pos + commit_marker.len();
-    
-    if backend_proof.len() < commit_start + 32 {
-        return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-            "invalid commitment in backend proof"
-        ));
-    }
-    
-    let commitment = backend_proof[commit_start..commit_start + 32].to_vec();
-    
-    let proof = Proof::new(SCHEME_ID, proof_bytes.to_vec(), commitment);
-    Ok(proof.to_bytes())
+    create_proof(SCHEME_ID, proof_bytes, commitment)
+        .map_err(PyErr::from)
 }
 
 #[pyfunction]
 pub fn verify_consistency(proof: Vec<u8>) -> PyResult<bool> {
-    let proof = match Proof::from_bytes(&proof) {
-        Some(p) => p,
-        None => return Ok(false),
+    let proof = match parse_and_validate_proof(&proof, SCHEME_ID) {
+        Ok(p) => p,
+        Err(_) => return Ok(false),
     };
-    
-    if proof.version != PROOF_VERSION || proof.scheme != SCHEME_ID {
-        return Ok(false);
-    }
-    
-    let mut backend_proof = Vec::new();
-    backend_proof.extend_from_slice(&proof.proof);
-    backend_proof.extend_from_slice(b"COMMIT:");
-    backend_proof.extend_from_slice(&proof.commitment);
-    
+
+    let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
     Ok(BulletproofsBackend::verify_consistency(&backend_proof))
 }
