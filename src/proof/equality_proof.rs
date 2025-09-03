@@ -57,5 +57,3 @@ pub fn verify_equality_with_commitment(proof: Vec<u8>, expected_commitment: Vec<
 
     Ok(SnarkBackend::verify_equality_zk(&proof.proof, &expected_commitment))
 }
-
-// removed unused helper
