@@ -1,7 +1,8 @@
 
 use crate::backend::snark::SnarkBackend;
-use crate::proof::{Proof, PROOF_VERSION};
+use crate::proof::Proof;
 use crate::utils::commitment::commit_value;
+use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
 use pyo3::prelude::*;
 
 const SCHEME_ID: u8 = 4;
@@ -43,18 +44,12 @@ pub fn prove_membership(value: u64, set: Vec<u64>) -> PyResult<Vec<u8>> {
 
 #[pyfunction]
 pub fn verify_membership(proof: Vec<u8>, set: Vec<u64>) -> PyResult<bool> {
-	let proof = match Proof::from_bytes(&proof) {
-		Some(p) => p,
-		None => return Ok(false),
+	let proof = match parse_and_validate_proof(&proof, SCHEME_ID) {
+		Ok(p) => p,
+		Err(_) => return Ok(false),
 	};
 
-	if proof.version != PROOF_VERSION || proof.scheme != SCHEME_ID {
-		return Ok(false);
-	}
-
-	if proof.commitment.len() != 32 {
-		return Ok(false);
-	}
+	if validate_standard_commitment(&proof.commitment).is_err() { return Ok(false); }
 
 	// Parse embedded set and SNARK proof
 	if proof.proof.len() < 4 {
