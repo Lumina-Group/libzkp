@@ -1,8 +1,8 @@
 use crate::backend::{stark::StarkBackend, ZkpBackend};
 use crate::proof::Proof;
-use crate::utils::validation::validate_improvement_params;
 use crate::utils::commitment::{commit_improvement, validate_improvement_commitment};
 use crate::utils::proof_helpers::parse_and_validate_proof;
+use crate::utils::validation::validate_improvement_params;
 use pyo3::prelude::*;
 
 const SCHEME_ID: u8 = 5;

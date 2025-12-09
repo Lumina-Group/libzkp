@@ -1,5 +1,5 @@
+use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::exceptions::{PyValueError, PyRuntimeError, PyTypeError};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -94,9 +94,10 @@ pub type ZkpResult<T> = Result<T, ZkpError>;
 // validation functions with better error messages
 pub fn validate_range(min: u64, max: u64) -> ZkpResult<()> {
     if min > max {
-        return Err(ZkpError::InvalidInput(
-            format!("Invalid range: min ({}) cannot be greater than max ({})", min, max)
-        ));
+        return Err(ZkpError::InvalidInput(format!(
+            "Invalid range: min ({}) cannot be greater than max ({})",
+            min, max
+        )));
     }
     Ok(())
 }
@@ -104,47 +105,46 @@ pub fn validate_range(min: u64, max: u64) -> ZkpResult<()> {
 pub fn validate_value_in_range(value: u64, min: u64, max: u64) -> ZkpResult<()> {
     validate_range(min, max)?;
     if value < min || value > max {
-        return Err(ZkpError::InvalidInput(
-            format!("Value {} is outside the valid range [{}, {}]", value, min, max)
-        ));
+        return Err(ZkpError::InvalidInput(format!(
+            "Value {} is outside the valid range [{}, {}]",
+            value, min, max
+        )));
     }
     Ok(())
 }
 
 pub fn validate_non_empty_slice<T>(slice: &[T], name: &str) -> ZkpResult<()> {
     if slice.is_empty() {
-        return Err(ZkpError::InvalidInput(
-            format!("{} cannot be empty", name)
-        ));
+        return Err(ZkpError::InvalidInput(format!("{} cannot be empty", name)));
     }
     Ok(())
 }
 
 pub fn validate_improvement(old: u64, new: u64) -> ZkpResult<u64> {
     if new <= old {
-        return Err(ZkpError::InvalidInput(
-            format!("No improvement: new value ({}) must be greater than old value ({})", new, old)
-        ));
+        return Err(ZkpError::InvalidInput(format!(
+            "No improvement: new value ({}) must be greater than old value ({})",
+            new, old
+        )));
     }
-    
+
     // Check for overflow
     match new.checked_sub(old) {
         Some(diff) => Ok(diff),
-        None => Err(ZkpError::IntegerOverflow(
-            format!("Integer overflow when calculating improvement: {} - {}", new, old)
-        )),
+        None => Err(ZkpError::IntegerOverflow(format!(
+            "Integer overflow when calculating improvement: {} - {}",
+            new, old
+        ))),
     }
 }
 
 pub fn validate_commitment_size(commitment: &[u8], expected_size: usize) -> ZkpResult<()> {
     if commitment.len() != expected_size {
-        return Err(ZkpError::InvalidProofFormat(
-            format!(
-                "Invalid commitment size: expected {} bytes, got {} bytes",
-                expected_size,
-                commitment.len()
-            )
-        ));
+        return Err(ZkpError::InvalidProofFormat(format!(
+            "Invalid commitment size: expected {} bytes, got {} bytes",
+            expected_size,
+            commitment.len()
+        )));
     }
     Ok(())
 }
@@ -152,13 +152,11 @@ pub fn validate_commitment_size(commitment: &[u8], expected_size: usize) -> ZkpR
 // Additional validation functions
 pub fn validate_proof_size(proof: &[u8], min_size: usize) -> ZkpResult<()> {
     if proof.len() < min_size {
-        return Err(ZkpError::InvalidProofFormat(
-            format!(
-                "Proof too small: expected at least {} bytes, got {} bytes",
-                min_size,
-                proof.len()
-            )
-        ));
+        return Err(ZkpError::InvalidProofFormat(format!(
+            "Proof too small: expected at least {} bytes, got {} bytes",
+            min_size,
+            proof.len()
+        )));
     }
     Ok(())
 }
@@ -167,23 +165,19 @@ pub fn validate_set_membership<T: Eq>(value: &T, set: &[T]) -> ZkpResult<usize> 
     match set.iter().position(|x| x == value) {
         Some(index) => Ok(index),
         None => Err(ZkpError::InvalidInput(
-            "Value is not a member of the provided set".to_string()
+            "Value is not a member of the provided set".to_string(),
         )),
     }
 }
 
 pub fn safe_add(a: u64, b: u64) -> ZkpResult<u64> {
     a.checked_add(b).ok_or_else(|| {
-        ZkpError::IntegerOverflow(
-            format!("Integer overflow in addition: {} + {}", a, b)
-        )
+        ZkpError::IntegerOverflow(format!("Integer overflow in addition: {} + {}", a, b))
     })
 }
 
 pub fn safe_mul(a: u64, b: u64) -> ZkpResult<u64> {
     a.checked_mul(b).ok_or_else(|| {
-        ZkpError::IntegerOverflow(
-            format!("Integer overflow in multiplication: {} * {}", a, b)
-        )
+        ZkpError::IntegerOverflow(format!("Integer overflow in multiplication: {} * {}", a, b))
     })
 }

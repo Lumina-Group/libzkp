@@ -1,15 +1,14 @@
 use super::ZkpBackend;
+use winter_utils::Serializable;
 use winterfell::{
+    crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree},
     math::{fields::f128::BaseElement, FieldElement, ToElements},
     matrix::ColMatrix,
-    Air, AirContext, Assertion, EvaluationFrame, ProofOptions, Prover, TraceInfo,
-    TraceTable, TransitionConstraintDegree, Trace,
-    crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree},
-    DefaultTraceLde, DefaultConstraintEvaluator, TracePolyTable,
-    StarkDomain, ConstraintCompositionCoefficients, AuxRandElements,
-    Proof, AcceptableOptions, PartitionOptions,
+    AcceptableOptions, Air, AirContext, Assertion, AuxRandElements,
+    ConstraintCompositionCoefficients, DefaultConstraintEvaluator, DefaultTraceLde,
+    EvaluationFrame, PartitionOptions, Proof, ProofOptions, Prover, StarkDomain, Trace, TraceInfo,
+    TracePolyTable, TraceTable, TransitionConstraintDegree,
 };
-use winter_utils::Serializable;
 
 // Define the AIR (Algebraic Intermediate Representation) for our proof system
 struct ImprovementAir {
@@ -38,16 +37,16 @@ impl Air for ImprovementAir {
     fn new(trace_info: TraceInfo, pub_inputs: Self::PublicInputs, options: ProofOptions) -> Self {
         assert_eq!(pub_inputs.0.len(), 2);
         let degrees = vec![TransitionConstraintDegree::new(1)];
-        
+
         let old_value = pub_inputs.0[0];
         let new_value = pub_inputs.0[1];
         let trace_length = trace_info.length();
-        
+
         // Calculate step size for linear interpolation
         let diff = new_value - old_value;
         let steps = BaseElement::new((trace_length - 1) as u128);
         let step_size = diff / steps;
-        
+
         Self {
             context: AirContext::new(trace_info, degrees, 2, options),
             old_value,
@@ -68,7 +67,7 @@ impl Air for ImprovementAir {
     ) {
         let current = frame.current()[0];
         let next = frame.next()[0];
-        
+
         // Constraint: next = current + step_size
         // This ensures linear interpolation from old to new value
         let step_size = E::from(self.step_size);
@@ -92,12 +91,12 @@ impl ImprovementProver {
     pub fn new() -> Self {
         Self {
             options: ProofOptions::new(
-                32,     // number of queries
-                8,      // blowup factor
-                0,      // grinding factor
+                32, // number of queries
+                8,  // blowup factor
+                0,  // grinding factor
                 winterfell::FieldExtension::None,
-                8,      // FRI folding factor
-                31,     // FRI max remainder degree
+                8,  // FRI folding factor
+                31, // FRI max remainder degree
             ),
         }
     }
@@ -110,8 +109,10 @@ impl Prover for ImprovementProver {
     type HashFn = Blake3_256<BaseElement>;
     type VC = MerkleTree<Self::HashFn>;
     type RandomCoin = DefaultRandomCoin<Self::HashFn>;
-    type TraceLde<E: FieldElement<BaseField = Self::BaseField>> = DefaultTraceLde<E, Self::HashFn, Self::VC>;
-    type ConstraintEvaluator<'a, E: FieldElement<BaseField = Self::BaseField>> = DefaultConstraintEvaluator<'a, Self::Air, E>;
+    type TraceLde<E: FieldElement<BaseField = Self::BaseField>> =
+        DefaultTraceLde<E, Self::HashFn, Self::VC>;
+    type ConstraintEvaluator<'a, E: FieldElement<BaseField = Self::BaseField>> =
+        DefaultConstraintEvaluator<'a, Self::Air, E>;
 
     fn get_pub_inputs(&self, trace: &Self::Trace) -> PublicInputs {
         let old_value = trace.get(0, 0);
@@ -154,14 +155,14 @@ impl StarkBackend {
         // Create the trace showing progression from old to new value
         let trace_length = 8; // Use a small power of 2 for efficiency
         let mut trace = TraceTable::new(1, trace_length);
-        
+
         // Calculate step size
         let old_elem = BaseElement::new(old as u128);
         let new_elem = BaseElement::new(new as u128);
         let diff = new_elem - old_elem;
         let steps = BaseElement::new((trace_length - 1) as u128);
         let step_size = diff / steps;
-        
+
         // Generate trace with exact linear interpolation
         let mut current = old_elem;
         for i in 0..trace_length {
@@ -173,8 +174,10 @@ impl StarkBackend {
 
         // Build the proof
         let prover = ImprovementProver::new();
-        let proof = prover.prove(trace).map_err(|e| format!("proof generation failed: {:?}", e))?;
-        
+        let proof = prover
+            .prove(trace)
+            .map_err(|e| format!("proof generation failed: {:?}", e))?;
+
         // Serialize the proof
         let mut bytes = Vec::new();
         proof.write_into(&mut bytes);
@@ -185,22 +188,24 @@ impl StarkBackend {
         // Deserialize the proof
         let proof = Proof::from_bytes(proof_data)
             .map_err(|e| format!("failed to deserialize proof: {:?}", e))?;
-        
+
         // Prepare public inputs
         let pub_inputs = PublicInputs(vec![
             BaseElement::new(old as u128),
             BaseElement::new(new as u128),
         ]);
-        
+
         // Create acceptable options for verification
-        let acceptable_options = AcceptableOptions::OptionSet(vec![ImprovementProver::new().options().clone()]);
-        
+        let acceptable_options =
+            AcceptableOptions::OptionSet(vec![ImprovementProver::new().options().clone()]);
+
         // Verify the proof
-        winterfell::verify::<ImprovementAir, Blake3_256<BaseElement>, DefaultRandomCoin<Blake3_256<BaseElement>>, MerkleTree<Blake3_256<BaseElement>>>(
-            proof, 
-            pub_inputs,
-            &acceptable_options
-        )
+        winterfell::verify::<
+            ImprovementAir,
+            Blake3_256<BaseElement>,
+            DefaultRandomCoin<Blake3_256<BaseElement>>,
+            MerkleTree<Blake3_256<BaseElement>>,
+        >(proof, pub_inputs, &acceptable_options)
         .map(|_| true)
         .map_err(|e| format!("verification failed: {:?}", e))
     }
@@ -211,7 +216,7 @@ impl ZkpBackend for StarkBackend {
         if data.len() != 16 {
             return vec![];
         }
-        
+
         let old = match data[0..8].try_into() {
             Ok(arr) => u64::from_le_bytes(arr),
             Err(_) => return vec![],
@@ -220,7 +225,7 @@ impl ZkpBackend for StarkBackend {
             Ok(arr) => u64::from_le_bytes(arr),
             Err(_) => return vec![],
         };
-        
+
         match Self::prove_improvement(old, new) {
             Ok(proof) => proof,
             Err(_) => vec![],
@@ -231,7 +236,7 @@ impl ZkpBackend for StarkBackend {
         if data.len() != 16 {
             return false;
         }
-        
+
         let old = match data[0..8].try_into() {
             Ok(arr) => u64::from_le_bytes(arr),
             Err(_) => return false,
@@ -240,7 +245,7 @@ impl ZkpBackend for StarkBackend {
             Ok(arr) => u64::from_le_bytes(arr),
             Err(_) => return false,
         };
-        
+
         Self::verify_improvement(proof, old, new).unwrap_or(false)
     }
 }

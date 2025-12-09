@@ -21,6 +21,7 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 - **エラーハンドリング**: 包括的なエラー処理と検証
 - **ベンチマーク機能**: パフォーマンス測定とプロファイリング
 - **ユーティリティ**: 共通処理の統合とコード重複の削減
+- **SNARKキー永続化**: 環境変数`LIBZKP_SNARK_KEY_DIR`や`set_snark_key_dir`でGroth16鍵をディスク保存・再利用
 
 ## サポートする証明タイプ
 
@@ -189,6 +190,20 @@ print(f"Range proofs: {status['range_proofs']}")
 
 # バッチを処理して全ての証明を生成
 batch_results = libzkp.process_batch(batch_id)
+```
+
+#### SNARK鍵の永続化と再利用
+
+```python
+# Groth16 の鍵をディスクに保存・再利用（初回のみ生成）
+# 環境変数でも指定可能: LIBZKP_SNARK_KEY_DIR=/path/to/keys
+libzkp.set_snark_key_dir("C:/zkp_keys")
+
+print(libzkp.is_snark_setup_initialized())  # 既にメモリにロード済みか確認
+
+# その後に等価性・集合所属の証明/検証を実行
+proof = libzkp.prove_equality(10, 10)
+assert libzkp.verify_equality(proof, 10, 10)
 ```
 
 ### 実用的な例

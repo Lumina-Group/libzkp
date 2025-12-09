@@ -2,10 +2,7 @@ use pyo3::prelude::*;
 use std::collections::HashMap;
 
 use crate::proof::Proof;
-use crate::utils::{
-    composition::CompositeProof,
-    error_handling::ZkpError,
-};
+use crate::utils::{composition::CompositeProof, error_handling::ZkpError};
 
 /// Create a composite proof from multiple individual proofs
 #[pyfunction]
@@ -52,9 +49,7 @@ pub fn create_proof_with_metadata(
 
 /// Extract metadata from a composite proof
 #[pyfunction]
-pub fn extract_proof_metadata(
-    composite_bytes: Vec<u8>,
-) -> PyResult<HashMap<String, Vec<u8>>> {
+pub fn extract_proof_metadata(composite_bytes: Vec<u8>) -> PyResult<HashMap<String, Vec<u8>>> {
     let composite = CompositeProof::from_bytes(&composite_bytes).map_err(PyErr::from)?;
     Ok(composite.metadata)
 }

@@ -5,21 +5,21 @@ use crate::utils::error_handling::{ZkpError, ZkpResult};
 pub fn parse_and_validate_proof(proof_bytes: &[u8], expected_scheme: u8) -> ZkpResult<Proof> {
     let proof = Proof::from_bytes(proof_bytes)
         .ok_or_else(|| ZkpError::InvalidProofFormat("failed to parse proof".to_string()))?;
-    
+
     if proof.version != PROOF_VERSION {
         return Err(ZkpError::InvalidProofFormat(format!(
             "unsupported proof version: expected {}, got {}",
             PROOF_VERSION, proof.version
         )));
     }
-    
+
     if proof.scheme != expected_scheme {
         return Err(ZkpError::InvalidProofFormat(format!(
             "wrong proof scheme: expected {}, got {}",
             expected_scheme, proof.scheme
         )));
     }
-    
+
     Ok(proof)
 }
 
@@ -30,16 +30,18 @@ pub fn extract_bulletproofs_components(backend_proof: &[u8]) -> ZkpResult<(Vec<u
         .windows(commit_marker.len())
         .position(|window| window == commit_marker)
         .ok_or_else(|| ZkpError::InvalidProofFormat("missing commitment marker".to_string()))?;
-    
+
     let proof_bytes = &backend_proof[0..commit_pos];
     let commit_start = commit_pos + commit_marker.len();
-    
+
     if backend_proof.len() < commit_start + 32 {
-        return Err(ZkpError::InvalidProofFormat("invalid commitment size".to_string()));
+        return Err(ZkpError::InvalidProofFormat(
+            "invalid commitment size".to_string(),
+        ));
     }
-    
+
     let commitment = backend_proof[commit_start..commit_start + 32].to_vec();
-    
+
     Ok((proof_bytes.to_vec(), commitment))
 }
 
@@ -53,7 +55,11 @@ pub fn reconstruct_bulletproofs_proof(proof_bytes: &[u8], commitment: &[u8]) -> 
 }
 
 /// Create a new proof with the given scheme and components
-pub fn create_proof(scheme_id: u8, proof_bytes: Vec<u8>, commitment: Vec<u8>) -> ZkpResult<Vec<u8>> {
+pub fn create_proof(
+    scheme_id: u8,
+    proof_bytes: Vec<u8>,
+    commitment: Vec<u8>,
+) -> ZkpResult<Vec<u8>> {
     let proof = Proof::new(scheme_id, proof_bytes, commitment);
     Ok(proof.to_bytes())
 }
@@ -77,7 +83,8 @@ pub fn is_ascending_order(values: &[u64]) -> bool {
 /// Calculate sum with overflow check
 pub fn safe_sum(values: &[u64]) -> ZkpResult<u64> {
     values.iter().try_fold(0u64, |acc, &val| {
-        acc.checked_add(val)
-            .ok_or_else(|| ZkpError::InvalidInput("integer overflow in sum calculation".to_string()))
+        acc.checked_add(val).ok_or_else(|| {
+            ZkpError::InvalidInput("integer overflow in sum calculation".to_string())
+        })
     })
 }

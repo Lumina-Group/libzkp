@@ -1,9 +1,6 @@
-    
 use crate::backend::bulletproofs::BulletproofsBackend;
 use crate::utils::proof_helpers::{
-    extract_bulletproofs_components,
-    create_proof,
-    parse_and_validate_proof,
+    create_proof, extract_bulletproofs_components, parse_and_validate_proof,
     reconstruct_bulletproofs_proof,
 };
 use pyo3::prelude::*;
@@ -15,11 +12,10 @@ pub fn prove_consistency(data: Vec<u64>) -> PyResult<Vec<u8>> {
     let backend_proof = BulletproofsBackend::prove_consistency(data)
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(e))?;
 
-    let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)
-        .map_err(PyErr::from)?;
-    
-    create_proof(SCHEME_ID, proof_bytes, commitment)
-        .map_err(PyErr::from)
+    let (proof_bytes, commitment) =
+        extract_bulletproofs_components(&backend_proof).map_err(PyErr::from)?;
+
+    create_proof(SCHEME_ID, proof_bytes, commitment).map_err(PyErr::from)
 }
 
 #[pyfunction]
