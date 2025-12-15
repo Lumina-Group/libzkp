@@ -25,3 +25,6 @@ pub const MAX_METADATA_ADDITIONAL_BYTES: usize = 64 * 1024; // 64 KiB
 
 /// Maximum size (in bytes) accepted for a serialized `CompositeProof`.
 pub const MAX_COMPOSITE_PROOF_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
+
+/// Maximum size (in bytes) accepted for bulletproofs backend proofs.
+pub const MAX_BULLETPROOFS_BACKEND_PROOF_BYTES: usize = 2 * 1024 * 1024; // 2 MiB

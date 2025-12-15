@@ -235,6 +235,7 @@ pub mod parallel {
     use crate::backend::{
         bulletproofs::BulletproofsBackend, snark::SnarkBackend, stark::StarkBackend,
     };
+    use crate::backend::snark::MAX_SET_SIZE;
     use crate::proof::{Proof, PROOF_VERSION};
     use crate::utils::proof_helpers::reconstruct_bulletproofs_proof;
     use rayon::prelude::*;
@@ -342,23 +343,24 @@ pub mod parallel {
                 if proof.scheme != 4 {
                     return false;
                 }
+                // Scheme 4 is SNARK-based membership with an embedded set:
+                // payload = [u32 set_len][set_len*u64 values][snark_proof bytes...]
                 if proof.proof.len() < 4 {
                     return false;
                 }
-                // Extract set from proof payload
                 let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
                     Ok(arr) => arr,
                     Err(_) => return false,
                 };
                 let set_size = u32::from_le_bytes(set_size_bytes) as usize;
-                let needed = match set_size
-                    .checked_mul(8)
-                    .and_then(|v| v.checked_add(4))
-                {
+                if set_size == 0 || set_size > MAX_SET_SIZE {
+                    return false;
+                }
+                let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
                     Some(n) => n,
                     None => return false,
                 };
-                if proof.proof.len() < needed {
+                if proof.proof.len() <= needed {
                     return false;
                 }
                 let mut set = Vec::with_capacity(set_size);
@@ -375,11 +377,15 @@ pub mod parallel {
                     set.push(val);
                     offset += 8;
                 }
+                let snark_bytes = &proof.proof[needed..];
+                if snark_bytes.is_empty() {
+                    return false;
+                }
                 if proof.commitment.len() != 32 {
                     return false;
                 }
-                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
-                BulletproofsBackend::verify_set_membership(&backend_proof, set)
+
+                SnarkBackend::verify_membership_zk(snark_bytes, &set, &proof.commitment)
             }
             "improvement" => {
                 if proof.scheme != 5 {

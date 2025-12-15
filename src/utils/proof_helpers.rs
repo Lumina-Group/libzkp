@@ -1,8 +1,15 @@
 use crate::proof::{Proof, PROOF_VERSION};
 use crate::utils::error_handling::{ZkpError, ZkpResult};
+use crate::utils::limits::{MAX_BULLETPROOFS_BACKEND_PROOF_BYTES, MAX_PROOF_TOTAL_BYTES};
 
 /// Common proof parsing and validation logic
 pub fn parse_and_validate_proof(proof_bytes: &[u8], expected_scheme: u8) -> ZkpResult<Proof> {
+    if proof_bytes.len() > MAX_PROOF_TOTAL_BYTES {
+        return Err(ZkpError::InvalidProofFormat(format!(
+            "proof too large: max {} bytes",
+            MAX_PROOF_TOTAL_BYTES
+        )));
+    }
     let proof = Proof::from_bytes(proof_bytes)
         .ok_or_else(|| ZkpError::InvalidProofFormat("failed to parse proof".to_string()))?;
 
@@ -25,6 +32,12 @@ pub fn parse_and_validate_proof(proof_bytes: &[u8], expected_scheme: u8) -> ZkpR
 
 /// Extract proof and commitment from bulletproofs backend output
 pub fn extract_bulletproofs_components(backend_proof: &[u8]) -> ZkpResult<(Vec<u8>, Vec<u8>)> {
+    if backend_proof.len() > MAX_BULLETPROOFS_BACKEND_PROOF_BYTES {
+        return Err(ZkpError::InvalidProofFormat(format!(
+            "backend proof too large: max {} bytes",
+            MAX_BULLETPROOFS_BACKEND_PROOF_BYTES
+        )));
+    }
     let commit_marker = b"COMMIT:";
     let commit_pos = backend_proof
         .windows(commit_marker.len())

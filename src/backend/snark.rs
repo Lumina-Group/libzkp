@@ -231,7 +231,7 @@ static UNIVERSAL_SETUP: OnceLock<
 //  - sum_i sel[i] * (value - set[i]) == 0
 //  - SHA256(value_le_8) == commitment (32 bytes)
 
-const MAX_SET_SIZE: usize = 64;
+pub const MAX_SET_SIZE: usize = 64;
 
 #[derive(Clone)]
 struct MembershipCircuit {
