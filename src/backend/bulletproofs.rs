@@ -5,6 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::rngs::OsRng;
 use rand::RngCore;
+use sha2::{Digest, Sha256};
 
 pub struct BulletproofsBackend;
 
@@ -341,15 +342,18 @@ impl BulletproofsBackend {
             proof_bytes.extend_from_slice(diff_commit.as_bytes());
         }
 
-        let mut commitment_hash = Vec::new();
+        // Commit to the full commitment list with a fixed-size digest (32 bytes),
+        // so it fits our `Proof` serialization limits and can be embedded safely.
+        let mut commitment_bytes = Vec::new();
         for commit in &commitments {
-            commitment_hash.extend_from_slice(commit.as_bytes());
+            commitment_bytes.extend_from_slice(commit.as_bytes());
         }
+        let commitment_digest: [u8; 32] = Sha256::digest(&commitment_bytes).into();
 
         let mut result = Vec::new();
         result.extend_from_slice(&proof_bytes);
         result.extend_from_slice(b"COMMIT:");
-        result.extend_from_slice(&commitment_hash);
+        result.extend_from_slice(&commitment_digest);
 
         Ok(result)
     }
@@ -367,6 +371,9 @@ impl BulletproofsBackend {
         let proof_bytes = &proof_data[0..commit_pos];
         let commit_start = commit_pos + commit_marker.len();
         let commitment_hash = &proof_data[commit_start..];
+        if commitment_hash.len() != 32 {
+            return false;
+        }
 
         let mut reader = proof_bytes;
 
@@ -401,7 +408,8 @@ impl BulletproofsBackend {
         for commit in &commitments {
             expected_commitment.extend_from_slice(commit.as_bytes());
         }
-        if commitment_hash != expected_commitment {
+        let expected_digest: [u8; 32] = Sha256::digest(&expected_commitment).into();
+        if commitment_hash != expected_digest.as_slice() {
             return false;
         }
 

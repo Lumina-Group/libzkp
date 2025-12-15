@@ -3,6 +3,7 @@ use crate::utils::error_handling::ZkpError;
 use ark_bn254::{Bn254, Fr};
 use ark_crypto_primitives::crh::constraints::CRHSchemeGadget;
 use ark_crypto_primitives::crh::sha256::constraints::{Sha256Gadget, UnitVar};
+use ark_ff::ToConstraintField;
 use ark_groth16::Groth16;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::prelude::*;
@@ -491,14 +492,12 @@ impl SnarkBackend {
             return false;
         }
 
-        // Map 32-byte commitment into 256 public field inputs (one per bit, little-endian within each byte)
-        let mut public_inputs: Vec<Fr> = Vec::with_capacity(32 * 8);
-        for byte in hash_input.iter() {
-            for i in 0..8 {
-                let bit = (byte >> i) & 1;
-                public_inputs.push(Fr::from(bit as u64));
-            }
-        }
+        // Public inputs must match `UInt8::new_input_vec` packing:
+        // bytes are packed into one or more field elements via `ToConstraintField`.
+        let public_inputs: Vec<Fr> = match ToConstraintField::<Fr>::to_field_elements(hash_input) {
+            Some(v) => v,
+            None => return false,
+        };
 
         Groth16::<Bn254>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap_or(false)
     }
@@ -571,15 +570,15 @@ impl SnarkBackend {
             Err(_) => return false,
         };
 
-        // Build public inputs: 256 bits commitment, K set values, K is_real flags
-        let mut public_inputs: Vec<Fr> = Vec::with_capacity(256 + MAX_SET_SIZE * 2);
-        // commitment bits (little-endian per byte)
-        for byte in commitment.iter() {
-            for i in 0..8 {
-                let bit = (byte >> i) & 1;
-                public_inputs.push(Fr::from(bit as u64));
-            }
-        }
+        // Build public inputs:
+        // - commitment bytes packed into field elements (UInt8::new_input_vec)
+        // - MAX_SET_SIZE set values (FpVar inputs)
+        // - MAX_SET_SIZE is_real flags (Boolean inputs as 0/1 field elements)
+        let mut public_inputs: Vec<Fr> =
+            match ToConstraintField::<Fr>::to_field_elements(commitment) {
+                Some(v) => v,
+                None => return false,
+            };
         // set values (padded)
         for i in 0..MAX_SET_SIZE {
             let v = if i < set.len() { set[i] } else { 0u64 };
