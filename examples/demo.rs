@@ -1,4 +1,14 @@
 use std::collections::HashMap;
+use sha2::{Digest, Sha256};
+
+fn temporal_token_from_code(code: &[u8; 32]) -> u64 {
+    let mut hasher = Sha256::new();
+    hasher.update(code);
+    let digest = hasher.finalize();
+    let mut first8 = [0u8; 8];
+    first8.copy_from_slice(&digest[0..8]);
+    u64::from_le_bytes(first8)
+}
 
 fn main() -> Result<(), pyo3::PyErr> {
     // Persist Groth16 keys to speed up subsequent runs.
@@ -95,6 +105,46 @@ fn main() -> Result<(), pyo3::PyErr> {
     let bench = libzkp::advanced::benchmark_proof_generation_numeric("range".to_string(), 10)?;
     println!("benchmark_range={:?}", bench);
 
+    // 10) Temporal Visual Code × ZKP (proof of observing a valid temporal code)
+    //
+    // Server-side conceptually:
+    //   code = SHA256(session_secret || time_slot)
+    //   set  = { LE_u64(SHA256(code_i)[0..8]) } for allowed time slots
+    // Client proves (in ZK): "I know some 32-byte code whose token is in set"
+    let session_secret = Sha256::digest(b"demo-session-secret").to_vec();
+    let time_slot: u64 = 12345;
+    let mut server_hasher = Sha256::new();
+    server_hasher.update(&session_secret);
+    server_hasher.update(&time_slot.to_le_bytes());
+    let code_bytes = server_hasher.finalize();
+    let code_arr: [u8; 32] = code_bytes
+        .as_slice()
+        .try_into()
+        .expect("sha256 digest is 32 bytes");
+
+    // Build allowed set (toy window)
+    let allowed_slots = vec![12343u64, 12344u64, 12345u64, 12346u64, 12347u64];
+    let mut allowed_tokens = Vec::with_capacity(allowed_slots.len());
+    for t in allowed_slots {
+        let mut h = Sha256::new();
+        h.update(&session_secret);
+        h.update(&t.to_le_bytes());
+        let c = h.finalize();
+        let c_arr: [u8; 32] = c.as_slice().try_into().unwrap();
+        allowed_tokens.push(temporal_token_from_code(&c_arr));
+    }
+
+    // Client-side: code_arr is what would be recovered by Temporal Visual Code decoding.
+    let tvc_proof = libzkp::proof::temporal_membership::prove_temporal_membership(
+        code_arr.to_vec(),
+        allowed_tokens.clone(),
+    )?;
+    let tvc_ok = libzkp::proof::temporal_membership::verify_temporal_membership(
+        tvc_proof,
+        allowed_tokens,
+    )?;
+    println!("temporal_membership_ok={}", tvc_ok);
+
     assert!(
         range_ok
             && eq_ok
@@ -104,6 +154,7 @@ fn main() -> Result<(), pyo3::PyErr> {
             && improvement_ok
             && consistency_ok
             && composite_ok
+            && tvc_ok
     );
     assert!(results.iter().all(|v| *v));
 

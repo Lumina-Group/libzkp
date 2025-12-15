@@ -12,6 +12,7 @@ use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystemRef, SynthesisE
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use ark_snark::SNARK;
 use ark_std::rand::rngs::OsRng;
+use sha2::{Digest, Sha256};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -350,6 +351,120 @@ fn get_membership_setup() -> &'static Result<
     MEMBERSHIP_SETUP.get_or_init(SnarkBackend::load_or_generate_membership_setup)
 }
 
+// ===== Temporal Visual Code Membership (hidden 32-byte code -> token -> membership) =====
+// Witness: code[32], selection bits sel[0..K-1] (one-hot)
+// Public inputs: K token values (u64) and K is_real flags (0/1), padded to MAX_SET_SIZE.
+// Derived inside circuit:
+//  - token := LE_u64(SHA256(code)[0..8])  (represented as a field element)
+// Constraints:
+//  - Each sel[i] is boolean
+//  - sum(sel[i]) == 1
+//  - For all i: sel[i] <= is_real[i]
+//  - sum_i sel[i] * (token - set[i]) == 0
+#[derive(Clone)]
+struct TemporalMembershipCircuit {
+    // Witness
+    code: Option<[u8; 32]>,
+    sel: Vec<Option<bool>>, // length MAX_SET_SIZE
+    // Public inputs
+    set_values: Vec<u64>, // length MAX_SET_SIZE
+    is_real: Vec<bool>,   // length MAX_SET_SIZE
+}
+
+impl ConstraintSynthesizer<Fr> for TemporalMembershipCircuit {
+    fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
+        // Public inputs: set values and is_real flags
+        if self.set_values.len() != MAX_SET_SIZE || self.is_real.len() != MAX_SET_SIZE {
+            return Err(SynthesisError::Unsatisfiable);
+        }
+        let mut set_vars: Vec<FpVar<Fr>> = Vec::with_capacity(MAX_SET_SIZE);
+        for v in self.set_values.into_iter() {
+            set_vars.push(FpVar::<Fr>::new_input(cs.clone(), || Ok(Fr::from(v)))?);
+        }
+        let mut is_real_bools: Vec<Boolean<Fr>> = Vec::with_capacity(MAX_SET_SIZE);
+        for b in self.is_real.into_iter() {
+            is_real_bools.push(Boolean::new_input(cs.clone(), || Ok(b))?);
+        }
+
+        // Witness: code bytes
+        let code_bytes = self.code.ok_or(SynthesisError::AssignmentMissing)?;
+        let code_vars = UInt8::<Fr>::new_witness_vec(cs.clone(), &code_bytes)?;
+
+        // token = LE_u64(SHA256(code)[0..8])
+        let digest_var = Sha256Gadget::<Fr>::evaluate(&UnitVar::default(), &code_vars)?;
+        let digest_bytes = digest_var.to_bytes_le()?; // length 32
+        if digest_bytes.len() < 8 {
+            return Err(SynthesisError::Unsatisfiable);
+        }
+        let mut token_var = FpVar::<Fr>::zero();
+        let mut coeff = Fr::from(1u64);
+        for b in digest_bytes.iter().take(8) {
+            let bits = b.to_bits_le()?;
+            if bits.len() != 8 {
+                return Err(SynthesisError::Unsatisfiable);
+            }
+            for bit in bits.into_iter() {
+                let bit_fp: FpVar<Fr> = bit.into();
+                token_var += bit_fp * coeff;
+                coeff *= Fr::from(2u64);
+            }
+        }
+
+        // Witness: selection bits
+        if self.sel.len() != MAX_SET_SIZE {
+            return Err(SynthesisError::Unsatisfiable);
+        }
+        let mut sel_bools: Vec<Boolean<Fr>> = Vec::with_capacity(MAX_SET_SIZE);
+        for bit in self.sel.into_iter() {
+            sel_bools.push(Boolean::new_witness(cs.clone(), || {
+                bit.ok_or(SynthesisError::AssignmentMissing)
+            })?);
+        }
+
+        // One-hot and sel <= is_real
+        let mut sum_sel = FpVar::<Fr>::zero();
+        for (i, sel_i) in sel_bools.iter().enumerate() {
+            let sel_fp: FpVar<Fr> = sel_i.clone().into();
+            sum_sel += sel_fp.clone();
+
+            let is_real_fp: FpVar<Fr> = is_real_bools[i].clone().into();
+            let one_minus_is_real = FpVar::<Fr>::one() - is_real_fp;
+            (sel_fp * one_minus_is_real).enforce_equal(&FpVar::<Fr>::zero())?;
+        }
+        sum_sel.enforce_equal(&FpVar::<Fr>::one())?;
+
+        // sum_i sel[i] * (token - set[i]) == 0
+        let mut acc = FpVar::<Fr>::zero();
+        for i in 0..MAX_SET_SIZE {
+            let sel_fp: FpVar<Fr> = sel_bools[i].clone().into();
+            acc += sel_fp * (token_var.clone() - set_vars[i].clone());
+        }
+        acc.enforce_equal(&FpVar::<Fr>::zero())?;
+
+        Ok(())
+    }
+}
+
+static TEMPORAL_MEMBERSHIP_SETUP: OnceLock<
+    Result<
+        (
+            ark_groth16::ProvingKey<Bn254>,
+            ark_groth16::VerifyingKey<Bn254>,
+        ),
+        String,
+    >,
+> = OnceLock::new();
+
+fn get_temporal_membership_setup() -> &'static Result<
+    (
+        ark_groth16::ProvingKey<Bn254>,
+        ark_groth16::VerifyingKey<Bn254>,
+    ),
+    String,
+> {
+    TEMPORAL_MEMBERSHIP_SETUP.get_or_init(SnarkBackend::load_or_generate_temporal_membership_setup)
+}
+
 impl SnarkBackend {
     fn load_or_generate_membership_setup() -> Result<
         (
@@ -389,6 +504,46 @@ impl SnarkBackend {
             set_values: vec![0u64; MAX_SET_SIZE],
             is_real: vec![false; MAX_SET_SIZE],
             commitment: Some([0u8; 32]),
+        };
+        Groth16::<Bn254>::circuit_specific_setup(dummy, rng)
+            .map_err(|e| format!("setup failed: {:?}", e))
+    }
+
+    fn load_or_generate_temporal_membership_setup() -> Result<
+        (
+            ark_groth16::ProvingKey<Bn254>,
+            ark_groth16::VerifyingKey<Bn254>,
+        ),
+        String,
+    > {
+        if let Some((pk_path, vk_path)) = key_paths("temporal_membership") {
+            match load_pk_vk(&pk_path, &vk_path)? {
+                Some(pair) => return Ok(pair),
+                None => {
+                    let pair = Self::generate_temporal_membership_setup()?;
+                    if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
+                        let _ = e;
+                    }
+                    return Ok(pair);
+                }
+            }
+        }
+        Self::generate_temporal_membership_setup()
+    }
+
+    fn generate_temporal_membership_setup() -> Result<
+        (
+            ark_groth16::ProvingKey<Bn254>,
+            ark_groth16::VerifyingKey<Bn254>,
+        ),
+        String,
+    > {
+        let rng = &mut OsRng;
+        let dummy = TemporalMembershipCircuit {
+            code: Some([0u8; 32]),
+            sel: vec![Some(false); MAX_SET_SIZE],
+            set_values: vec![0u64; MAX_SET_SIZE],
+            is_real: vec![false; MAX_SET_SIZE],
         };
         Groth16::<Bn254>::circuit_specific_setup(dummy, rng)
             .map_err(|e| format!("setup failed: {:?}", e))
@@ -502,6 +657,15 @@ impl SnarkBackend {
         Groth16::<Bn254>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap_or(false)
     }
 
+    fn temporal_token_from_code(code: &[u8; 32]) -> u64 {
+        let mut hasher = Sha256::new();
+        hasher.update(code);
+        let digest = hasher.finalize();
+        let mut first8 = [0u8; 8];
+        first8.copy_from_slice(&digest[0..8]);
+        u64::from_le_bytes(first8)
+    }
+
     pub fn prove_membership_zk(value: u64, set: Vec<u64>, commitment: [u8; 32]) -> Vec<u8> {
         if set.is_empty() || set.len() > MAX_SET_SIZE {
             return vec![];
@@ -585,6 +749,86 @@ impl SnarkBackend {
             public_inputs.push(Fr::from(v));
         }
         // is_real flags
+        for i in 0..MAX_SET_SIZE {
+            let flag = if i < set.len() { 1u64 } else { 0u64 };
+            public_inputs.push(Fr::from(flag));
+        }
+
+        Groth16::<Bn254>::verify_with_processed_vk(&pvk, &public_inputs, &proof).unwrap_or(false)
+    }
+
+    pub fn prove_temporal_membership_zk(code: [u8; 32], set: Vec<u64>) -> Vec<u8> {
+        if set.is_empty() || set.len() > MAX_SET_SIZE {
+            return vec![];
+        }
+
+        let token = Self::temporal_token_from_code(&code);
+        let pos = match set.iter().position(|&x| x == token) {
+            Some(i) => i,
+            None => return vec![],
+        };
+
+        // Prepare fixed-size public inputs
+        let mut set_values = vec![0u64; MAX_SET_SIZE];
+        let mut is_real = vec![false; MAX_SET_SIZE];
+        for (i, &v) in set.iter().enumerate() {
+            set_values[i] = v;
+            is_real[i] = true;
+        }
+        let mut sel = vec![Some(false); MAX_SET_SIZE];
+        sel[pos] = Some(true);
+
+        let circuit = TemporalMembershipCircuit {
+            code: Some(code),
+            sel,
+            set_values,
+            is_real,
+        };
+
+        let setup = match get_temporal_membership_setup() {
+            Ok(pair) => pair,
+            Err(_) => return vec![],
+        };
+        let rng = &mut OsRng;
+        let proof = match Groth16::<Bn254>::prove(&setup.0, circuit, rng) {
+            Ok(p) => p,
+            Err(_) => return vec![],
+        };
+
+        let mut bytes = Vec::new();
+        if proof.serialize_uncompressed(&mut bytes).is_err() {
+            return vec![];
+        }
+        bytes
+    }
+
+    pub fn verify_temporal_membership_zk(proof_data: &[u8], set: &[u64]) -> bool {
+        if set.is_empty() || set.len() > MAX_SET_SIZE {
+            return false;
+        }
+
+        let proof = match ark_groth16::Proof::<Bn254>::deserialize_uncompressed(proof_data) {
+            Ok(p) => p,
+            Err(_) => return false,
+        };
+
+        let setup = match get_temporal_membership_setup() {
+            Ok(pair) => pair,
+            Err(_) => return false,
+        };
+        let pvk = match Groth16::<Bn254>::process_vk(&setup.1) {
+            Ok(pvk) => pvk,
+            Err(_) => return false,
+        };
+
+        // Public inputs order must match the circuit allocation:
+        // - MAX_SET_SIZE set values
+        // - MAX_SET_SIZE is_real flags
+        let mut public_inputs: Vec<Fr> = Vec::with_capacity(MAX_SET_SIZE * 2);
+        for i in 0..MAX_SET_SIZE {
+            let v = if i < set.len() { set[i] } else { 0u64 };
+            public_inputs.push(Fr::from(v));
+        }
         for i in 0..MAX_SET_SIZE {
             let flag = if i < set.len() { 1u64 } else { 0u64 };
             public_inputs.push(Fr::from(flag));

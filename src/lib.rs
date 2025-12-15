@@ -31,6 +31,14 @@ fn libzkp(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(
+        proof::temporal_membership::prove_temporal_membership,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        proof::temporal_membership::verify_temporal_membership,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
         proof::improvement_proof::prove_improvement,
         m
     )?)?;
