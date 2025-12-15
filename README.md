@@ -2,6 +2,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Lumina-Group/libzkp)
+
 libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowledge Proof) ライブラリです。Rust で実装されており、PyO3 と maturin を用いて Python モジュールとしてビルドできます。
 
 ## 特徴
