@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 pub mod advanced;
 pub mod backend;
 pub mod proof;
+pub mod tvc;
 pub mod utils;
 
 #[pymodule]
@@ -78,6 +79,11 @@ fn libzkp(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(advanced::get_proof_info, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::set_snark_key_dir, m)?)?;
     m.add_function(wrap_pyfunction!(advanced::is_snark_setup_initialized, m)?)?;
+
+    // TVC bindings
+    m.add_function(wrap_pyfunction!(tvc::python_bindings::tvc_simulate_transmission, m)?)?;
+    m.add_function(wrap_pyfunction!(tvc::python_bindings::tvc_prove_reception, m)?)?;
+    m.add_function(wrap_pyfunction!(tvc::python_bindings::tvc_verify_reception, m)?)?;
 
     Ok(())
 }
