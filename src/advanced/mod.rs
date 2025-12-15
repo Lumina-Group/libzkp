@@ -217,7 +217,7 @@ pub fn prove_range_cached(value: u64, min: u64, max: u64) -> PyResult<Vec<u8>> {
         return Ok(cached);
     }
 
-    let mut timer = Timer::new();
+    let timer = Timer::new();
     let proof = crate::proof::range_proof::prove_range(value, min, max)?;
     let elapsed = timer.elapsed();
     crate::utils::performance::record_operation_metric("range_proof", elapsed);

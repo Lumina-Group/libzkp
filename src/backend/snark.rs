@@ -231,7 +231,7 @@ static UNIVERSAL_SETUP: OnceLock<
 //  - sum_i sel[i] * (value - set[i]) == 0
 //  - SHA256(value_le_8) == commitment (32 bytes)
 
-const MAX_SET_SIZE: usize = 64;
+pub const MAX_SET_SIZE: usize = 64;
 
 #[derive(Clone)]
 struct MembershipCircuit {
@@ -346,7 +346,7 @@ fn get_membership_setup() -> &'static Result<
     ),
     String,
 > {
-    MEMBERSHIP_SETUP.get_or_init(load_or_generate_membership_setup)
+    MEMBERSHIP_SETUP.get_or_init(SnarkBackend::load_or_generate_membership_setup)
 }
 
 impl SnarkBackend {
@@ -363,7 +363,9 @@ impl SnarkBackend {
                 None => {
                     let pair = Self::generate_membership_setup()?;
                     if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
-                        eprintln!("[libzkp] warning: could not persist membership keys: {}", e);
+                        // Production safety: avoid writing to stderr from a library.
+                        // Persistence failures are non-fatal; callers can still use in-memory keys.
+                        let _ = e;
                     }
                     return Ok(pair);
                 }
@@ -414,7 +416,9 @@ impl SnarkBackend {
                 None => {
                     let pair = Self::generate_equality_setup()?;
                     if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
-                        eprintln!("[libzkp] warning: could not persist equality keys: {}", e);
+                        // Production safety: avoid writing to stderr from a library.
+                        // Persistence failures are non-fatal; callers can still use in-memory keys.
+                        let _ = e;
                     }
                     return Ok(pair);
                 }
@@ -596,9 +600,20 @@ impl ZkpBackend for SnarkBackend {
         if data.len() != 48 {
             return vec![];
         }
-        let a = u64::from_le_bytes(data[0..8].try_into().unwrap());
-        let b = u64::from_le_bytes(data[8..16].try_into().unwrap());
-        let hash_input: [u8; 32] = data[16..48].try_into().unwrap();
+        let a_bytes: [u8; 8] = match data[0..8].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return vec![],
+        };
+        let b_bytes: [u8; 8] = match data[8..16].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return vec![],
+        };
+        let hash_input: [u8; 32] = match data[16..48].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return vec![],
+        };
+        let a = u64::from_le_bytes(a_bytes);
+        let b = u64::from_le_bytes(b_bytes);
 
         Self::prove_equality_zk(a, b, hash_input)
     }

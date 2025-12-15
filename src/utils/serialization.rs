@@ -1,4 +1,8 @@
 use crate::utils::error_handling::{ZkpError, ZkpResult};
+use crate::utils::limits::{
+    MAX_BACKEND_OPERATION_LEN, MAX_BACKEND_PAYLOAD_BYTES, MAX_METADATA_ADDITIONAL_BYTES,
+    MAX_U64_VEC_LEN,
+};
 
 /// Serialize a vector of u64 values to bytes
 pub fn serialize_u64_vec(values: &[u64]) -> Vec<u8> {
@@ -26,7 +30,16 @@ pub fn deserialize_u64_vec(data: &[u8]) -> ZkpResult<Vec<u64>> {
             ))
         }
     };
-    let expected_size = 4 + len * 8;
+    if len > MAX_U64_VEC_LEN {
+        return Err(ZkpError::SerializationError(format!(
+            "vector too large: len={}, max={}",
+            len, MAX_U64_VEC_LEN
+        )));
+    }
+    let expected_size = len
+        .checked_mul(8)
+        .and_then(|v| v.checked_add(4))
+        .ok_or_else(|| ZkpError::SerializationError("size overflow".to_string()))?;
 
     if data.len() != expected_size {
         return Err(ZkpError::SerializationError(format!(
@@ -82,6 +95,12 @@ pub fn deserialize_proof_metadata(data: &[u8]) -> ZkpResult<(u8, u8, Vec<u8>)> {
             ))
         }
     };
+    if additional_len > MAX_METADATA_ADDITIONAL_BYTES {
+        return Err(ZkpError::SerializationError(format!(
+            "metadata too large: max {} bytes",
+            MAX_METADATA_ADDITIONAL_BYTES
+        )));
+    }
 
     if data.len() != 6 + additional_len {
         return Err(ZkpError::SerializationError(
@@ -99,6 +118,21 @@ pub fn create_backend_payload(operation: &str, params: &[u8]) -> Vec<u8> {
     let mut payload = Vec::new();
     let op_bytes = operation.as_bytes();
 
+    // Production safety: keep payloads bounded.
+    if op_bytes.len() > MAX_BACKEND_OPERATION_LEN {
+        return Vec::new();
+    }
+    if params.len()
+        .checked_add(8)
+        .and_then(|v| v.checked_add(op_bytes.len()))
+        .is_none()
+    {
+        return Vec::new();
+    }
+    if 8 + op_bytes.len() + params.len() > MAX_BACKEND_PAYLOAD_BYTES {
+        return Vec::new();
+    }
+
     payload.extend_from_slice(&(op_bytes.len() as u32).to_le_bytes());
     payload.extend_from_slice(op_bytes);
     payload.extend_from_slice(&(params.len() as u32).to_le_bytes());
@@ -109,6 +143,12 @@ pub fn create_backend_payload(operation: &str, params: &[u8]) -> Vec<u8> {
 
 /// Parse a backend payload
 pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
+    if data.len() > MAX_BACKEND_PAYLOAD_BYTES {
+        return Err(ZkpError::SerializationError(format!(
+            "payload too large: max {} bytes",
+            MAX_BACKEND_PAYLOAD_BYTES
+        )));
+    }
     if data.len() < 8 {
         return Err(ZkpError::SerializationError(
             "payload too short".to_string(),
@@ -132,7 +172,16 @@ pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
         }
     };
 
-    if data.len() != 8 + op_len + params_len {
+    if op_len > MAX_BACKEND_OPERATION_LEN {
+        return Err(ZkpError::SerializationError(
+            "operation too long".to_string(),
+        ));
+    }
+    let expected = 8usize
+        .checked_add(op_len)
+        .and_then(|v| v.checked_add(params_len))
+        .ok_or_else(|| ZkpError::SerializationError("payload size overflow".to_string()))?;
+    if data.len() != expected {
         return Err(ZkpError::SerializationError(
             "payload size mismatch".to_string(),
         ));

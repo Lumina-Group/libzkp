@@ -235,6 +235,7 @@ pub mod parallel {
     use crate::backend::{
         bulletproofs::BulletproofsBackend, snark::SnarkBackend, stark::StarkBackend,
     };
+    use crate::backend::snark::MAX_SET_SIZE;
     use crate::proof::{Proof, PROOF_VERSION};
     use crate::utils::proof_helpers::reconstruct_bulletproofs_proof;
     use rayon::prelude::*;
@@ -291,8 +292,16 @@ pub mod parallel {
                 if proof.proof.len() < 16 {
                     return false;
                 }
-                let min = u64::from_le_bytes(proof.proof[0..8].try_into().unwrap());
-                let max = u64::from_le_bytes(proof.proof[8..16].try_into().unwrap());
+                let min_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let max_bytes: [u8; 8] = match proof.proof[8..16].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let min = u64::from_le_bytes(min_bytes);
+                let max = u64::from_le_bytes(max_bytes);
                 if min > max {
                     return false;
                 }
@@ -319,7 +328,11 @@ pub mod parallel {
                 if proof.proof.len() < 8 {
                     return false;
                 }
-                let threshold = u64::from_le_bytes(proof.proof[0..8].try_into().unwrap());
+                let threshold_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let threshold = u64::from_le_bytes(threshold_bytes);
                 if proof.commitment.len() != 32 {
                     return false;
                 }
@@ -330,28 +343,49 @@ pub mod parallel {
                 if proof.scheme != 4 {
                     return false;
                 }
+                // Scheme 4 is SNARK-based membership with an embedded set:
+                // payload = [u32 set_len][set_len*u64 values][snark_proof bytes...]
                 if proof.proof.len() < 4 {
                     return false;
                 }
-                // Extract set from proof payload
-                let set_size = u32::from_le_bytes(proof.proof[0..4].try_into().unwrap()) as usize;
-                let needed = 4 + set_size * 8;
-                if proof.proof.len() < needed {
+                let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let set_size = u32::from_le_bytes(set_size_bytes) as usize;
+                if set_size == 0 || set_size > MAX_SET_SIZE {
+                    return false;
+                }
+                let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
+                    Some(n) => n,
+                    None => return false,
+                };
+                if proof.proof.len() <= needed {
                     return false;
                 }
                 let mut set = Vec::with_capacity(set_size);
                 let mut offset = 4;
                 for _ in 0..set_size {
-                    let val =
-                        u64::from_le_bytes(proof.proof[offset..offset + 8].try_into().unwrap());
+                    let val_bytes: [u8; 8] = match proof.proof.get(offset..offset + 8) {
+                        Some(slice) => match slice.try_into() {
+                            Ok(arr) => arr,
+                            Err(_) => return false,
+                        },
+                        None => return false,
+                    };
+                    let val = u64::from_le_bytes(val_bytes);
                     set.push(val);
                     offset += 8;
+                }
+                let snark_bytes = &proof.proof[needed..];
+                if snark_bytes.is_empty() {
+                    return false;
                 }
                 if proof.commitment.len() != 32 {
                     return false;
                 }
-                let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
-                BulletproofsBackend::verify_set_membership(&backend_proof, set)
+
+                SnarkBackend::verify_membership_zk(snark_bytes, &set, &proof.commitment)
             }
             "improvement" => {
                 if proof.scheme != 5 {
@@ -360,8 +394,16 @@ pub mod parallel {
                 if proof.commitment.len() != 16 {
                     return false;
                 }
-                let diff = u64::from_le_bytes(proof.commitment[0..8].try_into().unwrap());
-                let new = u64::from_le_bytes(proof.commitment[8..16].try_into().unwrap());
+                let diff_bytes: [u8; 8] = match proof.commitment[0..8].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let new_bytes: [u8; 8] = match proof.commitment[8..16].try_into() {
+                    Ok(arr) => arr,
+                    Err(_) => return false,
+                };
+                let diff = u64::from_le_bytes(diff_bytes);
+                let new = u64::from_le_bytes(new_bytes);
                 if diff == 0 {
                     return false;
                 }

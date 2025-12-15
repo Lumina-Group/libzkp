@@ -1,5 +1,6 @@
 use crate::proof::Proof;
 use crate::utils::error_handling::{ZkpError, ZkpResult};
+use crate::utils::limits::MAX_COMPOSITE_PROOF_BYTES;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
@@ -82,6 +83,12 @@ impl CompositeProof {
 
     /// Deserialize composite proof from bytes
     pub fn from_bytes(data: &[u8]) -> ZkpResult<Self> {
+        if data.len() > MAX_COMPOSITE_PROOF_BYTES {
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "composite proof too large: max {} bytes",
+                MAX_COMPOSITE_PROOF_BYTES
+            )));
+        }
         if data.len() < 12 {
             return Err(ZkpError::InvalidProofFormat(format!(
                 "composite proof too short: expected at least 12 bytes, got {}",
@@ -142,18 +149,21 @@ impl CompositeProof {
             };
             offset += 4;
 
-            if offset + proof_len > data.len() {
+            let next = offset.checked_add(proof_len).ok_or_else(|| {
+                ZkpError::InvalidProofFormat("proof length overflow".to_string())
+            })?;
+            if next > data.len() {
                 return Err(ZkpError::InvalidProofFormat(
                     "truncated proof data".to_string(),
                 ));
             }
 
-            let proof = Proof::from_bytes(&data[offset..offset + proof_len]).ok_or_else(|| {
+            let proof = Proof::from_bytes(&data[offset..next]).ok_or_else(|| {
                 ZkpError::InvalidProofFormat("invalid proof in composite".to_string())
             })?;
 
             proofs.push(proof);
-            offset += proof_len;
+            offset = next;
         }
 
         // Read metadata
@@ -194,7 +204,11 @@ impl CompositeProof {
                 )));
             }
 
-            if offset + key_len + value_len > data.len() {
+            let next = offset
+                .checked_add(key_len)
+                .and_then(|v| v.checked_add(value_len))
+                .ok_or_else(|| ZkpError::InvalidProofFormat("metadata length overflow".to_string()))?;
+            if next > data.len() {
                 return Err(ZkpError::InvalidProofFormat(format!(
                     "truncated metadata content at index {}: offset={}, key_len={}, value_len={}, data_len={}",
                     i, offset, key_len, value_len, data.len()
@@ -216,13 +230,16 @@ impl CompositeProof {
         }
 
         // Read composition hash
-        if offset + 32 > data.len() {
+        let end = offset
+            .checked_add(32)
+            .ok_or_else(|| ZkpError::InvalidProofFormat("hash length overflow".to_string()))?;
+        if end > data.len() {
             return Err(ZkpError::InvalidProofFormat(
                 "missing composition hash".to_string(),
             ));
         }
 
-        let composition_hash = data[offset..offset + 32].to_vec();
+        let composition_hash = data[offset..end].to_vec();
 
         // Verify composition hash
         let expected_hash = Self::compute_composition_hash(&proofs);

@@ -19,6 +19,10 @@ impl Proof {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
+        // Avoid producing invalid encodings due to u32 truncation.
+        if self.proof.len() > u32::MAX as usize || self.commitment.len() > u32::MAX as usize {
+            return Vec::new();
+        }
         let mut out = Vec::new();
         out.push(self.version);
         out.push(self.scheme);
@@ -30,6 +34,13 @@ impl Proof {
     }
 
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        use crate::utils::limits::{
+            MAX_COMMITMENT_BYTES, MAX_PROOF_PAYLOAD_BYTES, MAX_PROOF_TOTAL_BYTES,
+        };
+
+        if data.len() > MAX_PROOF_TOTAL_BYTES {
+            return None;
+        }
         if data.len() < 10 {
             return None;
         }
@@ -37,7 +48,13 @@ impl Proof {
         let scheme = data[1];
         let proof_len = u32::from_le_bytes(data[2..6].try_into().ok()?) as usize;
         let comm_len = u32::from_le_bytes(data[6..10].try_into().ok()?) as usize;
-        if data.len() != 10 + proof_len + comm_len {
+        if proof_len > MAX_PROOF_PAYLOAD_BYTES || comm_len > MAX_COMMITMENT_BYTES {
+            return None;
+        }
+        let total = 10usize
+            .checked_add(proof_len)?
+            .checked_add(comm_len)?;
+        if data.len() != total {
             return None;
         }
         let proof = data[10..10 + proof_len].to_vec();
