@@ -172,7 +172,7 @@ impl BulletproofsBackend {
             Ok(c) => c,
             Err(_) => return false,
         };
-        reader = &reader[64..];
+        // No further payload is expected after this point.
 
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);
@@ -613,9 +613,9 @@ impl BulletproofsBackend {
             return false;
         }
         let challenge = match reader[0..32].try_into() {
-            Ok(arr) => match Scalar::from_canonical_bytes(arr) {
-                ct if ct.is_some().into() => ct.unwrap(),
-                _ => return false,
+            Ok(arr) => match Option::<Scalar>::from(Scalar::from_canonical_bytes(arr)) {
+                Some(s) => s,
+                None => return false,
             },
             Err(_) => return false,
         };
@@ -625,13 +625,13 @@ impl BulletproofsBackend {
             return false;
         }
         let response = match reader[0..32].try_into() {
-            Ok(arr) => match Scalar::from_canonical_bytes(arr) {
-                ct if ct.is_some().into() => ct.unwrap(),
-                _ => return false,
+            Ok(arr) => match Option::<Scalar>::from(Scalar::from_canonical_bytes(arr)) {
+                Some(s) => s,
+                None => return false,
             },
             Err(_) => return false,
         };
-        reader = &reader[32..];
+        // No further payload is expected after this point.
 
         let pc_gens = PedersenGens::default();
 
@@ -731,7 +731,7 @@ impl BulletproofsBackend {
             Ok(c) => c,
             Err(_) => return false,
         };
-        reader = &reader[32..];
+        // No further payload is expected after this point.
 
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(64, 2);

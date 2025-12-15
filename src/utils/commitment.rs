@@ -62,8 +62,14 @@ pub fn extract_improvement_values(commitment: &[u8]) -> ZkpResult<(u64, u64)> {
         ));
     }
 
-    let diff = u64::from_le_bytes(commitment[0..8].try_into().unwrap());
-    let new = u64::from_le_bytes(commitment[8..16].try_into().unwrap());
+    let diff_bytes: [u8; 8] = commitment[0..8].try_into().map_err(|_| {
+        ZkpError::InvalidProofFormat("invalid improvement commitment encoding".to_string())
+    })?;
+    let new_bytes: [u8; 8] = commitment[8..16].try_into().map_err(|_| {
+        ZkpError::InvalidProofFormat("invalid improvement commitment encoding".to_string())
+    })?;
+    let diff = u64::from_le_bytes(diff_bytes);
+    let new = u64::from_le_bytes(new_bytes);
 
     if diff == 0 {
         return Err(ZkpError::InvalidProofFormat(

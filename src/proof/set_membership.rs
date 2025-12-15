@@ -54,15 +54,29 @@ pub fn verify_membership(proof: Vec<u8>, set: Vec<u64>) -> PyResult<bool> {
     if proof.proof.len() < 4 {
         return Ok(false);
     }
-    let set_size = u32::from_le_bytes(proof.proof[0..4].try_into().unwrap()) as usize;
-    let needed = 4 + set_size * 8;
+    let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
+        Ok(arr) => arr,
+        Err(_) => return Ok(false),
+    };
+    let set_size = u32::from_le_bytes(set_size_bytes) as usize;
+    let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
+        Some(n) => n,
+        None => return Ok(false),
+    };
     if proof.proof.len() <= needed {
         return Ok(false);
     }
     let mut embedded_set = Vec::with_capacity(set_size);
     let mut offset = 4;
     for _ in 0..set_size {
-        let val = u64::from_le_bytes(proof.proof[offset..offset + 8].try_into().unwrap());
+        let val_bytes: [u8; 8] = match proof.proof.get(offset..offset + 8) {
+            Some(slice) => match slice.try_into() {
+                Ok(arr) => arr,
+                Err(_) => return Ok(false),
+            },
+            None => return Ok(false),
+        };
+        let val = u64::from_le_bytes(val_bytes);
         embedded_set.push(val);
         offset += 8;
     }
