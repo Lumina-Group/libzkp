@@ -7,7 +7,7 @@
 - **3つの暗号学的バックエンド**: Bulletproofs、SNARK (Groth16)、STARK
 - **6種類の証明タイプ**: 範囲、等価性、しきい値、集合所属、向上、整合性
 - **高度な機能**: バッチ処理、並列検証、キャッシング、メタデータサポート
- - **包括的なエラーハンドリング**: 詳細なエラーメッセージと型安全性（内部のロック失敗やセットアップ失敗は例外として返却）
+- **包括的なエラーハンドリング**: 詳細なエラーメッセージと型安全性（内部のロック失敗やセットアップ失敗は例外として返却）
 - **SNARK鍵の永続化**: 環境変数`LIBZKP_SNARK_KEY_DIR`またはPython API `set_snark_key_dir`でGroth16鍵をディスクに保存し、再起動後も再利用
 
 ## Python API
@@ -30,6 +30,9 @@
 | `prove_consistency(data)` | 昇順に並んだデータ列であることを示す整合性証明を生成します。 | Bulletproofs |
 | `verify_consistency(proof)` | 整合性証明を検証します。 | Bulletproofs |
 
+補足:
+- 集合所属証明の `set` は **1〜64要素**をサポートします（64を超えると証明生成に失敗します）。
+
 ### 高度な機能
 
 #### バッチ処理
@@ -42,7 +45,7 @@
 | `batch_add_membership_proof(batch_id, value, set)` | 集合所属証明をバッチに追加します。 |
 | `batch_add_improvement_proof(batch_id, old, new)` | 向上証明をバッチに追加します。 |
 | `batch_add_consistency_proof(batch_id, data)` | 整合性証明をバッチに追加します。 |
-| `process_batch(batch_id)` | バッチ内の全証明を並列生成します。 |
+| `process_batch(batch_id)` | バッチ内の全証明を並列生成します（処理後、この `batch_id` は消費されます）。 |
 | `get_batch_status(batch_id)` | バッチの状態を取得します。 |
 | `clear_batch(batch_id)` | バッチをクリアします。 |
 

@@ -38,7 +38,7 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 
 ### Bulletproofs
 - **特徴**: 効率的な範囲証明に特化、証明サイズが対数的
-- **用途**: 範囲証明、しきい値証明、集合所属証明、整合性証明
+- **用途**: 範囲証明、しきい値証明、整合性証明
 - **実装**: curve25519-dalek と bulletproofs クレートを使用
 
 ### SNARK (Groth16)
