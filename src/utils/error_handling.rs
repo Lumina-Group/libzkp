@@ -1,4 +1,6 @@
+#[cfg(feature = "python")]
 use pyo3::exceptions::{PyRuntimeError, PyTypeError, PyValueError};
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 use std::fmt;
 
@@ -35,6 +37,7 @@ impl fmt::Display for ZkpError {
 
 impl std::error::Error for ZkpError {}
 
+#[cfg(feature = "python")]
 impl From<ZkpError> for PyErr {
     fn from(err: ZkpError) -> Self {
         match err {

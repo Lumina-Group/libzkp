@@ -15,19 +15,20 @@ use ark_std::rand::rngs::OsRng;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 // ===== Key directory configuration =====
-// Allows persisting/rehydrating proving and verifying keys for SNARK circuits.
-static SNARK_KEY_DIR: OnceLock<Option<PathBuf>> = OnceLock::new();
+// Explicit path from `set_snark_key_dir` overrides `LIBZKP_SNARK_KEY_DIR` for this process.
+// (Previously `OnceLock<Option<PathBuf>>` could freeze `None` before `set_snark_key_dir`, breaking persistence.)
+static SNARK_KEY_DIR_OVERRIDE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
 fn get_key_dir() -> Option<PathBuf> {
-    if let Some(dir) = SNARK_KEY_DIR.get() {
-        return dir.clone();
+    if let Ok(guard) = SNARK_KEY_DIR_OVERRIDE.lock() {
+        if let Some(ref p) = *guard {
+            return Some(p.clone());
+        }
     }
-    let env_dir = env::var("LIBZKP_SNARK_KEY_DIR").ok().map(PathBuf::from);
-    SNARK_KEY_DIR.get_or_init(|| env_dir.clone());
-    env_dir
+    env::var("LIBZKP_SNARK_KEY_DIR").ok().map(PathBuf::from)
 }
 
 fn key_paths(prefix: &str) -> Option<(PathBuf, PathBuf)> {
@@ -130,8 +131,10 @@ pub fn set_snark_key_dir(path: &str) -> Result<(), ZkpError> {
     }
 
     let requested = PathBuf::from(path);
-    let stored = SNARK_KEY_DIR.get_or_init(|| Some(requested.clone()));
-    if let Some(existing) = stored {
+    let mut guard = SNARK_KEY_DIR_OVERRIDE.lock().map_err(|_| {
+        ZkpError::ConfigError("SNARK key directory lock poisoned".to_string())
+    })?;
+    if let Some(existing) = guard.as_ref() {
         if existing != &requested {
             return Err(ZkpError::ConfigError(format!(
                 "SNARK key directory already set to {}; new value {} rejected",
@@ -139,6 +142,8 @@ pub fn set_snark_key_dir(path: &str) -> Result<(), ZkpError> {
                 requested.display()
             )));
         }
+    } else {
+        *guard = Some(requested.clone());
     }
 
     // Keep environment variable in sync for child processes/tools.

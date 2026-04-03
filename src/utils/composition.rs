@@ -1,10 +1,14 @@
 use crate::proof::Proof;
 use crate::utils::error_handling::{ZkpError, ZkpResult};
 use crate::utils::limits::MAX_COMPOSITE_PROOF_BYTES;
+use crate::utils::proof_helpers::verify_proof_cryptographic;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 
-/// Composite proof that combines multiple individual proofs
+/// Composite proof that combines multiple individual proofs.
+///
+/// - [`Self::verify_integrity`] checks the SHA-256 composition hash over **proofs and metadata** (encoding integrity).
+/// - [`Self::verify_cryptographic`] checks each inner proof with the appropriate ZKP backend (soundness).
 #[derive(Debug, Clone)]
 pub struct CompositeProof {
     pub proofs: Vec<Proof>,
@@ -21,7 +25,7 @@ impl CompositeProof {
             ));
         }
 
-        let composition_hash = Self::compute_composition_hash(&proofs);
+        let composition_hash = Self::compute_composition_hash(&proofs, &HashMap::new());
 
         Ok(CompositeProof {
             proofs,
@@ -33,18 +37,27 @@ impl CompositeProof {
     /// Add metadata to the composite proof
     pub fn add_metadata(&mut self, key: String, value: Vec<u8>) {
         self.metadata.insert(key, value);
-        // Recompute hash when metadata changes
-        self.composition_hash = Self::compute_composition_hash(&self.proofs);
+        self.composition_hash = Self::compute_composition_hash(&self.proofs, &self.metadata);
     }
 
-    /// Compute the composition hash for integrity verification
-    fn compute_composition_hash(proofs: &[Proof]) -> Vec<u8> {
+    /// Composition hash over proofs and canonical metadata (sorted keys) for tamper detection.
+    fn compute_composition_hash(proofs: &[Proof], metadata: &HashMap<String, Vec<u8>>) -> Vec<u8> {
         let mut hasher = Sha256::new();
         hasher.update(b"COMPOSITE_PROOF:");
         hasher.update(&(proofs.len() as u32).to_le_bytes());
 
         for proof in proofs {
             hasher.update(&proof.to_bytes());
+        }
+
+        let mut keys: Vec<_> = metadata.keys().cloned().collect();
+        keys.sort();
+        for k in keys {
+            let v = metadata.get(&k).expect("key from sorted keys");
+            hasher.update(&(k.len() as u32).to_le_bytes());
+            hasher.update(k.as_bytes());
+            hasher.update(&(v.len() as u32).to_le_bytes());
+            hasher.update(v);
         }
 
         hasher.finalize().to_vec()
@@ -268,7 +281,7 @@ impl CompositeProof {
         let composition_hash = data[offset..end].to_vec();
 
         // Verify composition hash
-        let expected_hash = Self::compute_composition_hash(&proofs);
+        let expected_hash = Self::compute_composition_hash(&proofs, &metadata);
         if composition_hash != expected_hash {
             return Err(ZkpError::InvalidProofFormat(
                 "composition hash mismatch".to_string(),
@@ -282,10 +295,20 @@ impl CompositeProof {
         })
     }
 
-    /// Verify the integrity of the composite proof
+    /// Structural integrity: hash matches proof + metadata encoding (not cryptographic soundness of inner proofs).
     pub fn verify_integrity(&self) -> bool {
-        let expected_hash = Self::compute_composition_hash(&self.proofs);
+        let expected_hash = Self::compute_composition_hash(&self.proofs, &self.metadata);
         self.composition_hash == expected_hash
+    }
+
+    /// Verify each inner proof with the ZKP backend (Bulletproofs / SNARK / STARK).
+    pub fn verify_cryptographic(&self) -> bool {
+        self.proofs.iter().all(verify_proof_cryptographic)
+    }
+
+    /// Structural integrity plus cryptographic verification of every inner proof.
+    pub fn verify_full(&self) -> bool {
+        self.verify_integrity() && self.verify_cryptographic()
     }
 }
 

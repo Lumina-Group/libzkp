@@ -86,6 +86,12 @@ pip install maturin
 maturin develop --release
 ```
 
+Python バインディングなしで Rust ライブラリのみビルドする場合（デフォルト機能の `python` を外します）:
+
+```bash
+cargo build --no-default-features
+```
+
 ## 使い方
 
 ### 基本的な使用例

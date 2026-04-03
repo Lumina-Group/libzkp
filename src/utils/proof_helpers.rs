@@ -1,3 +1,8 @@
+use crate::backend::ZkpBackend;
+use crate::backend::{
+    bulletproofs::BulletproofsBackend, snark::MAX_SET_SIZE, snark::SnarkBackend,
+    stark::StarkBackend,
+};
 use crate::proof::{Proof, PROOF_VERSION};
 use crate::utils::error_handling::{ZkpError, ZkpResult};
 use crate::utils::limits::{MAX_BULLETPROOFS_BACKEND_PROOF_BYTES, MAX_PROOF_TOTAL_BYTES};
@@ -100,4 +105,120 @@ pub fn safe_sum(values: &[u64]) -> ZkpResult<u64> {
             ZkpError::InvalidInput("integer overflow in sum calculation".to_string())
         })
     })
+}
+
+/// Cryptographically verify a single [`Proof`] using its `scheme` field (backends: Bulletproofs, SNARK, STARK).
+pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
+    if proof.version != PROOF_VERSION {
+        return false;
+    }
+    match proof.scheme {
+        1 => {
+            if proof.proof.len() < 16 || proof.commitment.len() != 32 {
+                return false;
+            }
+            let min_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let max_bytes: [u8; 8] = match proof.proof[8..16].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let min = u64::from_le_bytes(min_bytes);
+            let max = u64::from_le_bytes(max_bytes);
+            if min > max {
+                return false;
+            }
+            let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+            BulletproofsBackend::verify_range_with_bounds(&backend_proof, min, max)
+        }
+        2 => {
+            if proof.commitment.len() != 32 {
+                return false;
+            }
+            SnarkBackend::verify(&proof.proof, &proof.commitment)
+        }
+        3 => {
+            if proof.proof.len() < 8 || proof.commitment.len() != 32 {
+                return false;
+            }
+            let threshold_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let threshold = u64::from_le_bytes(threshold_bytes);
+            let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+            BulletproofsBackend::verify_threshold(&backend_proof, threshold)
+        }
+        4 => {
+            if proof.proof.len() < 4 || proof.commitment.len() != 32 {
+                return false;
+            }
+            let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let set_size = u32::from_le_bytes(set_size_bytes) as usize;
+            if set_size == 0 || set_size > MAX_SET_SIZE {
+                return false;
+            }
+            let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
+                Some(n) => n,
+                None => return false,
+            };
+            if proof.proof.len() <= needed {
+                return false;
+            }
+            let mut set = Vec::with_capacity(set_size);
+            let mut offset = 4;
+            for _ in 0..set_size {
+                let val_bytes: [u8; 8] = match proof.proof.get(offset..offset + 8) {
+                    Some(slice) => match slice.try_into() {
+                        Ok(arr) => arr,
+                        Err(_) => return false,
+                    },
+                    None => return false,
+                };
+                set.push(u64::from_le_bytes(val_bytes));
+                offset += 8;
+            }
+            let snark_bytes = &proof.proof[needed..];
+            if snark_bytes.is_empty() {
+                return false;
+            }
+            SnarkBackend::verify_membership_zk(snark_bytes, &set, &proof.commitment)
+        }
+        5 => {
+            if proof.commitment.len() != 16 {
+                return false;
+            }
+            let diff_bytes: [u8; 8] = match proof.commitment[0..8].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let new_bytes: [u8; 8] = match proof.commitment[8..16].try_into() {
+                Ok(arr) => arr,
+                Err(_) => return false,
+            };
+            let diff = u64::from_le_bytes(diff_bytes);
+            let new = u64::from_le_bytes(new_bytes);
+            if diff == 0 {
+                return false;
+            }
+            let old = match new.checked_sub(diff) {
+                Some(v) => v,
+                None => return false,
+            };
+            let mut data = Vec::with_capacity(16);
+            data.extend_from_slice(&old.to_le_bytes());
+            data.extend_from_slice(&new.to_le_bytes());
+            StarkBackend::verify(&proof.proof, &data)
+        }
+        6 => {
+            let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);
+            BulletproofsBackend::verify_consistency(&backend_proof)
+        }
+        _ => false,
+    }
 }
