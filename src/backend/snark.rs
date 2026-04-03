@@ -2,7 +2,7 @@ use super::ZkpBackend;
 use crate::utils::encoding::read_u64_le;
 use crate::utils::error_handling::ZkpError;
 use ark_bn254::{Bn254, Fr};
-use ark_ff::{Field, PrimeField};
+use ark_ff::{AdditiveGroup, PrimeField};
 use ark_groth16::Groth16;
 use ark_r1cs_std::fields::fp::FpVar;
 use ark_r1cs_std::prelude::*;

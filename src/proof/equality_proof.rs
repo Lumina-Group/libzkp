@@ -1,6 +1,6 @@
 use crate::backend::snark::SnarkBackend;
 use crate::proof::Proof;
-use crate::utils::commitment::{commit_value, commit_value_snark};
+use crate::utils::commitment::commit_value_snark;
 use crate::utils::error_handling::ZkpResult;
 use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
 use crate::utils::validation::validate_equality_params;
