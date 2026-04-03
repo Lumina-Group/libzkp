@@ -7,6 +7,7 @@ use merlin::Transcript;
 use rand::rngs::OsRng;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
+use std::sync::OnceLock;
 
 /// Bulletproofs backend wire format (no ambiguous delimiters):
 /// `[u32 proof_body_len][proof_body][u32=32][32 byte commitment]`.
@@ -44,10 +45,38 @@ fn decode_proof_body_and_commit(data: &[u8]) -> Option<(&[u8], &[u8])> {
     ))
 }
 
+/// Cached generator pairs keyed by (n_bits, party_capacity).
+/// Most callers use (8, 1), (8, 2), (64, 1), or (64, 2); we cache those.
+static BP_GENS_8_1: OnceLock<(PedersenGens, BulletproofGens)> = OnceLock::new();
+static BP_GENS_8_2: OnceLock<(PedersenGens, BulletproofGens)> = OnceLock::new();
+static BP_GENS_64_1: OnceLock<(PedersenGens, BulletproofGens)> = OnceLock::new();
+static BP_GENS_64_2: OnceLock<(PedersenGens, BulletproofGens)> = OnceLock::new();
+
 fn bp_gens_pair(party_capacity: usize) -> (PedersenGens, BulletproofGens) {
-    let pc_gens = PedersenGens::default();
-    let bp_gens = BulletproofGens::new(64, party_capacity);
-    (pc_gens, bp_gens)
+    bp_gens_pair_bits(64, party_capacity)
+}
+
+/// Return cached generator pair for the given bit-width and party capacity.
+/// Falls back to allocating a fresh pair for uncached combinations.
+pub fn bp_gens_pair_bits(n_bits: usize, party_capacity: usize) -> (PedersenGens, BulletproofGens) {
+    match (n_bits, party_capacity) {
+        (8, 1) => BP_GENS_8_1
+            .get_or_init(|| (PedersenGens::default(), BulletproofGens::new(8, 1)))
+            .clone(),
+        (8, 2) => BP_GENS_8_2
+            .get_or_init(|| (PedersenGens::default(), BulletproofGens::new(8, 2)))
+            .clone(),
+        (64, 1) => BP_GENS_64_1
+            .get_or_init(|| (PedersenGens::default(), BulletproofGens::new(64, 1)))
+            .clone(),
+        (64, 2) => BP_GENS_64_2
+            .get_or_init(|| (PedersenGens::default(), BulletproofGens::new(64, 2)))
+            .clone(),
+        _ => (
+            PedersenGens::default(),
+            BulletproofGens::new(n_bits, party_capacity),
+        ),
+    }
 }
 
 fn random_blinding() -> Scalar {
@@ -64,20 +93,38 @@ fn parse_compressed_32(slice: &[u8]) -> Option<CompressedRistretto> {
 pub struct BulletproofsBackend;
 
 impl BulletproofsBackend {
+    /// Range proof with default 64-bit width. Delegates to `prove_range_with_bounds_bits`.
     pub fn prove_range_with_bounds(value: u64, min: u64, max: u64) -> Result<Vec<u8>, String> {
+        Self::prove_range_with_bounds_bits(value, min, max, 64)
+    }
+
+    /// Range proof with configurable bit-width (8 or 64). Use 8 when values fit in [0, 255].
+    /// `n_bits` must be a power of two between 1 and 64.
+    pub fn prove_range_with_bounds_bits(
+        value: u64,
+        min: u64,
+        max: u64,
+        n_bits: usize,
+    ) -> Result<Vec<u8>, String> {
         if value < min || value > max {
             return Err("value out of range".to_string());
         }
+        let max_diff = (1u64 << n_bits).saturating_sub(1);
+        let diff_min = value - min;
+        let diff_max = max - value;
+        if diff_min > max_diff || diff_max > max_diff {
+            return Err(format!(
+                "range width exceeds {}-bit capacity; use n_bits=64",
+                n_bits
+            ));
+        }
 
-        let (pc_gens, bp_gens) = bp_gens_pair(2);
+        let (pc_gens, bp_gens) = bp_gens_pair_bits(n_bits, 2);
         let blinding = random_blinding();
 
         let value_commit = pc_gens.commit(Scalar::from(value), blinding).compress();
 
-        let diff_min = value - min;
-        // Tie diff_min commitment to value commitment: use the SAME blinding
         let diff_min_blinding = blinding;
-
         let mut transcript_min = Transcript::new(b"libzkp_range_min");
         let (range_proof_min, diff_min_commit) = RangeProof::prove_single(
             &bp_gens,
@@ -85,14 +132,11 @@ impl BulletproofsBackend {
             &mut transcript_min,
             diff_min,
             &diff_min_blinding,
-            64,
+            n_bits,
         )
         .map_err(|_| "min range proof generation failed".to_string())?;
 
-        let diff_max = max - value;
-        // Ensure linkage: use the NEGATED blinding so that (max*B - C_v) equals commit(diff_max, -blinding)
         let diff_max_blinding = -blinding;
-
         let mut transcript_max = Transcript::new(b"libzkp_range_max");
         let (range_proof_max, diff_max_commit) = RangeProof::prove_single(
             &bp_gens,
@@ -100,14 +144,15 @@ impl BulletproofsBackend {
             &mut transcript_max,
             diff_max,
             &diff_max_blinding,
-            64,
+            n_bits,
         )
         .map_err(|_| "max range proof generation failed".to_string())?;
 
         let mut proof_bytes = Vec::new();
-
         proof_bytes.extend_from_slice(&min.to_le_bytes());
         proof_bytes.extend_from_slice(&max.to_le_bytes());
+        // Store n_bits so verifier knows which generators to use
+        proof_bytes.extend_from_slice(&(n_bits as u32).to_le_bytes());
 
         let rp_min_bytes = range_proof_min.to_bytes();
         proof_bytes.extend_from_slice(&(rp_min_bytes.len() as u32).to_le_bytes());
@@ -123,7 +168,8 @@ impl BulletproofsBackend {
         encode_proof_body_with_commit(&proof_bytes, value_commit.as_bytes())
     }
 
-    pub fn verify_range_with_bounds(proof_data: &[u8], min: u64, max: u64) -> bool {
+    /// Verify a range proof produced by `prove_range_with_bounds_bits`.
+    pub fn verify_range_with_bounds_bits(proof_data: &[u8], min: u64, max: u64) -> bool {
         let (proof_bytes, commit_slice) = match decode_proof_body_and_commit(proof_data) {
             Some(p) => p,
             None => return false,
@@ -139,8 +185,7 @@ impl BulletproofsBackend {
         };
 
         let mut reader = proof_bytes;
-
-        if reader.len() < 16 {
+        if reader.len() < 20 {
             return false;
         }
         let proof_min = match read_u64_le(reader, 0) {
@@ -154,22 +199,24 @@ impl BulletproofsBackend {
         if proof_min != min || proof_max != max {
             return false;
         }
-        reader = &reader[16..];
+        let n_bits = u32::from_le_bytes(match reader[16..20].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return false,
+        }) as usize;
+        reader = &reader[20..];
 
         if reader.len() < 4 {
             return false;
         }
-        let rp_min_len = match reader[0..4].try_into() {
-            Ok(arr) => u32::from_le_bytes(arr) as usize,
+        let rp_min_len = u32::from_le_bytes(match reader[0..4].try_into() {
+            Ok(arr) => arr,
             Err(_) => return false,
-        };
+        }) as usize;
         reader = &reader[4..];
-
         if reader.len() < rp_min_len {
             return false;
         }
-        let rp_min_bytes = &reader[0..rp_min_len];
-        let range_proof_min = match RangeProof::from_bytes(rp_min_bytes) {
+        let range_proof_min = match RangeProof::from_bytes(&reader[0..rp_min_len]) {
             Ok(rp) => rp,
             Err(_) => return false,
         };
@@ -178,17 +225,15 @@ impl BulletproofsBackend {
         if reader.len() < 4 {
             return false;
         }
-        let rp_max_len = match reader[0..4].try_into() {
-            Ok(arr) => u32::from_le_bytes(arr) as usize,
+        let rp_max_len = u32::from_le_bytes(match reader[0..4].try_into() {
+            Ok(arr) => arr,
             Err(_) => return false,
-        };
+        }) as usize;
         reader = &reader[4..];
-
         if reader.len() < rp_max_len {
             return false;
         }
-        let rp_max_bytes = &reader[0..rp_max_len];
-        let range_proof_max = match RangeProof::from_bytes(rp_max_bytes) {
+        let range_proof_max = match RangeProof::from_bytes(&reader[0..rp_max_len]) {
             Ok(rp) => rp,
             Err(_) => return false,
         };
@@ -205,15 +250,13 @@ impl BulletproofsBackend {
             Some(c) => c,
             None => return false,
         };
-        // No further payload is expected after this point.
 
-        let (pc_gens, bp_gens) = bp_gens_pair(2);
+        let (pc_gens, bp_gens) = bp_gens_pair_bits(n_bits, 2);
 
-        // Recompute expected diff commitments from the value commitment
         let expected_min_commit = (value_commit_point - (Scalar::from(min) * pc_gens.B)).compress();
-        let expected_max_commit = ((Scalar::from(max) * pc_gens.B) - value_commit_point).compress();
+        let expected_max_commit =
+            ((Scalar::from(max) * pc_gens.B) - value_commit_point).compress();
 
-        // Optional: check included commits match expected linkage
         if expected_min_commit != diff_min_commit || expected_max_commit != diff_max_commit {
             return false;
         }
@@ -225,35 +268,45 @@ impl BulletproofsBackend {
                 &pc_gens,
                 &mut transcript_min,
                 &expected_min_commit,
-                64,
+                n_bits,
             )
             .is_err()
         {
             return false;
         }
         let mut transcript_max = Transcript::new(b"libzkp_range_max");
-        if range_proof_max
+        range_proof_max
             .verify_single(
                 &bp_gens,
                 &pc_gens,
                 &mut transcript_max,
                 &expected_max_commit,
-                64,
+                n_bits,
             )
-            .is_err()
-        {
-            return false;
-        }
-
-        true
+            .is_ok()
     }
 
+    /// Universal range verifier: reads n_bits from the wire format.
+    /// Works for both 64-bit and any bit-width proofs produced by `prove_range_with_bounds_bits`.
+    pub fn verify_range_with_bounds(proof_data: &[u8], min: u64, max: u64) -> bool {
+        Self::verify_range_with_bounds_bits(proof_data, min, max)
+    }
+
+    /// Threshold proof with default 64-bit width. Delegates to `prove_threshold_bits`.
     pub fn prove_threshold(values: Vec<u64>, threshold: u64) -> Result<Vec<u8>, String> {
+        Self::prove_threshold_bits(values, threshold, 64)
+    }
+
+    /// Threshold proof with configurable bit-width. Use 8 when sum - threshold fits in [0, 255].
+    pub fn prove_threshold_bits(
+        values: Vec<u64>,
+        threshold: u64,
+        n_bits: usize,
+    ) -> Result<Vec<u8>, String> {
         if values.is_empty() {
             return Err("values cannot be empty".to_string());
         }
 
-        // Calculate sum with overflow checking
         let mut sum: u64 = 0;
         for &value in &values {
             sum = sum
@@ -265,15 +318,20 @@ impl BulletproofsBackend {
             return Err("threshold not met".to_string());
         }
 
-        let (pc_gens, bp_gens) = bp_gens_pair(values.len() + 1);
-        let sum_blinding = random_blinding();
+        let diff = sum - threshold;
+        let max_diff = (1u64 << n_bits).saturating_sub(1);
+        if diff > max_diff {
+            return Err(format!(
+                "sum - threshold exceeds {}-bit capacity; use n_bits=64",
+                n_bits
+            ));
+        }
 
+        let (pc_gens, bp_gens) = bp_gens_pair_bits(n_bits, values.len() + 1);
+        let sum_blinding = random_blinding();
         let sum_commit = pc_gens.commit(Scalar::from(sum), sum_blinding).compress();
 
-        let diff = sum - threshold;
-        // Link diff to sum: use the same blinding
         let diff_blinding = sum_blinding;
-
         let mut transcript = Transcript::new(b"libzkp_threshold");
         let (range_proof, diff_commit) = RangeProof::prove_single(
             &bp_gens,
@@ -281,13 +339,14 @@ impl BulletproofsBackend {
             &mut transcript,
             diff,
             &diff_blinding,
-            64,
+            n_bits,
         )
         .map_err(|_| "range proof generation failed".to_string())?;
 
         let mut proof_bytes = Vec::new();
-
         proof_bytes.extend_from_slice(&threshold.to_le_bytes());
+        // Store n_bits for verifier
+        proof_bytes.extend_from_slice(&(n_bits as u32).to_le_bytes());
 
         let rp_bytes = range_proof.to_bytes();
         proof_bytes.extend_from_slice(&(rp_bytes.len() as u32).to_le_bytes());
@@ -479,6 +538,7 @@ impl BulletproofsBackend {
         true
     }
 
+    /// Universal threshold verifier: reads n_bits from the wire format.
     pub fn verify_threshold(proof_data: &[u8], threshold: u64) -> bool {
         let (proof_bytes, sum_commit_slice) = match decode_proof_body_and_commit(proof_data) {
             Some(p) => p,
@@ -486,8 +546,7 @@ impl BulletproofsBackend {
         };
 
         let mut reader = proof_bytes;
-
-        if reader.len() < 8 {
+        if reader.len() < 12 {
             return false;
         }
         let proof_threshold = match read_u64_le(reader, 0) {
@@ -497,22 +556,25 @@ impl BulletproofsBackend {
         if proof_threshold != threshold {
             return false;
         }
-        reader = &reader[8..];
+        let n_bits = u32::from_le_bytes(match reader[8..12].try_into() {
+            Ok(arr) => arr,
+            Err(_) => return false,
+        }) as usize;
+        reader = &reader[12..];
 
         if reader.len() < 4 {
             return false;
         }
-        let rp_len = match reader[0..4].try_into() {
-            Ok(arr) => u32::from_le_bytes(arr) as usize,
+        let rp_len = u32::from_le_bytes(match reader[0..4].try_into() {
+            Ok(arr) => arr,
             Err(_) => return false,
-        };
+        }) as usize;
         reader = &reader[4..];
 
         if reader.len() < rp_len {
             return false;
         }
-        let rp_bytes = &reader[0..rp_len];
-        let range_proof = match RangeProof::from_bytes(rp_bytes) {
+        let range_proof = match RangeProof::from_bytes(&reader[0..rp_len]) {
             Ok(rp) => rp,
             Err(_) => return false,
         };
@@ -525,11 +587,9 @@ impl BulletproofsBackend {
             Some(c) => c,
             None => return false,
         };
-        // No further payload is expected after this point.
 
-        let (pc_gens, bp_gens) = bp_gens_pair(2);
+        let (pc_gens, bp_gens) = bp_gens_pair_bits(n_bits, 2);
 
-        // Recompute expected diff commit from sum commit and threshold linkage
         let sum_commit = match parse_compressed_32(sum_commit_slice) {
             Some(c) => c,
             None => return false,
@@ -552,7 +612,7 @@ impl BulletproofsBackend {
                 &pc_gens,
                 &mut transcript,
                 &expected_diff_commit,
-                64,
+                n_bits,
             )
             .is_ok()
     }

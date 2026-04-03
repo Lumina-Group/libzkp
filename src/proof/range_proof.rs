@@ -8,9 +8,15 @@ use crate::utils::{
 const SCHEME_ID: u8 = 1;
 
 pub fn prove_range(value: u64, min: u64, max: u64) -> ZkpResult<Vec<u8>> {
+    prove_range_with_bits(value, min, max, 64)
+}
+
+/// Range proof with configurable Bulletproofs bit-width (e.g. 8 for values in [0, 255]).
+/// Use 8 when `value - min` and `max - value` both fit in n_bits (i.e., < 2^n_bits).
+pub fn prove_range_with_bits(value: u64, min: u64, max: u64, n_bits: usize) -> ZkpResult<Vec<u8>> {
     validate_range_params(value, min, max)?;
 
-    let backend_proof = BulletproofsBackend::prove_range_with_bounds(value, min, max)
+    let backend_proof = BulletproofsBackend::prove_range_with_bounds_bits(value, min, max, n_bits)
         .map_err(|e| ZkpError::BackendError(e))?;
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;

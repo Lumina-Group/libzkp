@@ -1,6 +1,6 @@
 use crate::backend::snark::SnarkBackend;
 use crate::proof::Proof;
-use crate::utils::commitment::commit_value;
+use crate::utils::commitment::{commit_value, commit_value_snark};
 use crate::utils::error_handling::ZkpResult;
 use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
 use crate::utils::validation::validate_equality_params;
@@ -10,7 +10,7 @@ const SCHEME_ID: u8 = 2;
 pub fn prove_equality(val1: u64, val2: u64) -> ZkpResult<Vec<u8>> {
     validate_equality_params(val1, val2)?;
 
-    let commitment = commit_value(val1);
+    let commitment = commit_value_snark(val1);
     let commitment_arr: [u8; 32] = commitment.clone().try_into().map_err(|_| {
         crate::utils::error_handling::ZkpError::InvalidProofFormat(
             "invalid commitment size".to_string(),
@@ -50,7 +50,7 @@ pub fn verify_equality(proof: Vec<u8>, val1: u64, val2: u64) -> bool {
         return false;
     }
 
-    let expected_commitment = commit_value(val1);
+    let expected_commitment = commit_value_snark(val1);
     verify_equality_inner(proof, expected_commitment)
 }
 

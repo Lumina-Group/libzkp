@@ -1,6 +1,6 @@
 use crate::backend::snark::{SnarkBackend, MAX_SET_SIZE};
 use crate::proof::Proof;
-use crate::utils::commitment::commit_value;
+use crate::utils::commitment::commit_value_snark;
 use crate::utils::error_handling::{ZkpError, ZkpResult};
 use crate::utils::proof_helpers::{
     deserialize_embedded_set_prefix, parse_and_validate_proof, validate_standard_commitment,
@@ -13,7 +13,7 @@ pub fn prove_membership(value: u64, set: Vec<u64>) -> ZkpResult<Vec<u8>> {
     validate_membership_params(value, &set)?;
     validate_set_size(&set, MAX_SET_SIZE)?;
 
-    let commitment = commit_value(value);
+    let commitment = commit_value_snark(value);
     let commitment_arr: [u8; 32] = commitment
         .clone()
         .try_into()

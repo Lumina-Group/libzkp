@@ -9,10 +9,21 @@ use crate::utils::validation::validate_threshold_params;
 const SCHEME_ID: u8 = 3;
 
 pub fn prove_threshold(values: Vec<u64>, threshold: u64) -> ZkpResult<Vec<u8>> {
+    prove_threshold_with_bits(values, threshold, 64)
+}
+
+/// Threshold proof with configurable Bulletproofs bit-width.
+/// Use 8 when `sum(values) - threshold` fits in [0, 255].
+pub fn prove_threshold_with_bits(
+    values: Vec<u64>,
+    threshold: u64,
+    n_bits: usize,
+) -> ZkpResult<Vec<u8>> {
     validate_threshold_params(&values, threshold)?;
 
-    let backend_proof = BulletproofsBackend::prove_threshold(values, threshold)
-        .map_err(|e| crate::utils::error_handling::ZkpError::InvalidInput(e))?;
+    let backend_proof =
+        BulletproofsBackend::prove_threshold_bits(values, threshold, n_bits)
+            .map_err(|e| crate::utils::error_handling::ZkpError::InvalidInput(e))?;
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;
 

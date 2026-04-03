@@ -1,11 +1,18 @@
+use crate::backend::snark::{fr_to_commitment, mimc_hash_native};
 use crate::utils::error_handling::{ZkpError, ZkpResult};
 use sha2::{Digest, Sha256};
 
-/// Generate a SHA256 commitment for a single value
+/// Generate a SHA256 commitment for a single value (used by Bulletproofs-based proofs).
 pub fn commit_value(value: u64) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(&value.to_le_bytes());
     hasher.finalize().to_vec()
+}
+
+/// Generate a MiMC-5 commitment for a single value (used by SNARK-based proofs).
+/// Returns 32 bytes: the canonical little-endian serialization of MiMC5(value) over BN254 Fr.
+pub fn commit_value_snark(value: u64) -> Vec<u8> {
+    fr_to_commitment(mimc_hash_native(value)).to_vec()
 }
 
 /// Generate a SHA256 commitment for multiple values

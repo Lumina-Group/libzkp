@@ -155,7 +155,8 @@ pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
     }
     match proof.scheme {
         1 => {
-            if proof.proof.len() < 16 || proof.commitment.len() != 32 {
+            // New format: [min:8][max:8][n_bits:4][...] — minimum 20 bytes
+            if proof.proof.len() < 20 || proof.commitment.len() != 32 {
                 return false;
             }
             let min_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
@@ -181,7 +182,8 @@ pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
             SnarkBackend::verify(&proof.proof, &proof.commitment)
         }
         3 => {
-            if proof.proof.len() < 8 || proof.commitment.len() != 32 {
+            // New format: [threshold:8][n_bits:4][...] — minimum 12 bytes
+            if proof.proof.len() < 12 || proof.commitment.len() != 32 {
                 return false;
             }
             let threshold_bytes: [u8; 8] = match proof.proof[0..8].try_into() {
