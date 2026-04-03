@@ -225,14 +225,24 @@ impl Default for Timer {
 pub mod parallel {
     use crate::proof::{Proof, PROOF_VERSION};
     use crate::utils::proof_helpers::verify_proof_cryptographic;
-    use rayon::prelude::*;
 
     /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
-        proofs
-            .par_iter()
-            .map(|(proof_data, proof_type)| verify_single_proof(proof_data, proof_type))
-            .collect()
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+            proofs
+                .par_iter()
+                .map(|(proof_data, proof_type)| verify_single_proof(proof_data, proof_type))
+                .collect()
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            proofs
+                .iter()
+                .map(|(proof_data, proof_type)| verify_single_proof(proof_data, proof_type))
+                .collect()
+        }
     }
 
     /// Verify a single proof: `proof_type` must match the encoded scheme id.

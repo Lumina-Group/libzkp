@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use lazy_static::lazy_static;
-use rayon::prelude::*;
 
 use crate::utils::{
     composition::{BatchOperation, ProofBatch},
@@ -100,11 +99,23 @@ pub fn process_batch(batch_id: usize) -> ZkpResult<Vec<Vec<u8>>> {
             .ok_or_else(|| ZkpError::InvalidInput(format!("Invalid batch ID: {}", batch_id)))?
     };
 
-    batch
-        .operations()
-        .par_iter()
-        .map(process_batch_operation)
-        .collect()
+    #[cfg(feature = "parallel")]
+    {
+        use rayon::prelude::*;
+        batch
+            .operations()
+            .par_iter()
+            .map(process_batch_operation)
+            .collect()
+    }
+    #[cfg(not(feature = "parallel"))]
+    {
+        batch
+            .operations()
+            .iter()
+            .map(process_batch_operation)
+            .collect()
+    }
 }
 
 /// Retrieve statistics about a batch such as counts per operation type

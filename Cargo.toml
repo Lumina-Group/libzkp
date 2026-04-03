@@ -25,12 +25,22 @@ sha2 = "0.10"
 ark-crypto-primitives = { version = "0.5", features = ["r1cs", "crh"] }
 ark-r1cs-std = "0.5"
 ark-ff = "0.5"
-rayon = "1.8"
+rayon = { version = "1.8", optional = true }
 lazy_static = "1.4"
 
+# WASM support
+wasm-bindgen = { version = "0.2", optional = true }
+js-sys = { version = "0.3", optional = true }
+getrandom = { version = "0.2", features = ["js"], optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+
 [features]
-default = ["python"]
+default = ["python", "parallel"]
+parallel = ["dep:rayon"]
 # Rust-only library build: `cargo build --no-default-features`
 python = ["dep:pyo3"]
 # Enable when building the Python extension module (e.g. via maturin).
 python-extension = ["python", "pyo3/extension-module"]
+# WASM target for browser-side proof generation
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:getrandom", "dep:serde", "dep:serde-wasm-bindgen"]

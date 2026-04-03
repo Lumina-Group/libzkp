@@ -6,6 +6,9 @@ pub mod utils;
 #[cfg(feature = "python")]
 mod python_api;
 
+#[cfg(feature = "wasm")]
+pub mod wasm_api;
+
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
