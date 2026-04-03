@@ -162,9 +162,9 @@ impl CompositeProof {
             };
             offset += 4;
 
-            let next = offset.checked_add(proof_len).ok_or_else(|| {
-                ZkpError::InvalidProofFormat("proof length overflow".to_string())
-            })?;
+            let next = offset
+                .checked_add(proof_len)
+                .ok_or_else(|| ZkpError::InvalidProofFormat("proof length overflow".to_string()))?;
             if next > data.len() {
                 return Err(ZkpError::InvalidProofFormat(
                     "truncated proof data".to_string(),
@@ -279,6 +279,13 @@ impl CompositeProof {
         }
 
         let composition_hash = data[offset..end].to_vec();
+
+        if end != data.len() {
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "trailing bytes after composition hash: {} extra byte(s)",
+                data.len().saturating_sub(end)
+            )));
+        }
 
         // Verify composition hash
         let expected_hash = Self::compute_composition_hash(&proofs, &metadata);

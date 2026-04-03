@@ -51,15 +51,15 @@ impl ProofCache {
             Err(_) => return, // lock poisoned; skip put
         };
 
-        // If cache is full, remove least recently used entry
+        // If cache is full, evict one entry with the lowest access count (LFU-style).
         if cache.len() >= self.max_size {
-            let lru_key = cache
+            let victim_key = cache
                 .iter()
                 .min_by_key(|(_, entry)| entry.access_count)
                 .map(|(k, _)| k.clone());
 
-            if let Some(lru_key) = lru_key {
-                cache.remove(&lru_key);
+            if let Some(victim_key) = victim_key {
+                cache.remove(&victim_key);
             }
         }
 
@@ -82,14 +82,6 @@ impl ProofCache {
         match self.cache.lock() {
             Ok(cache) => cache.len(),
             Err(_) => 0,
-        }
-    }
-
-    /// Clean up expired entries
-    pub fn cleanup(&self) {
-        if let Ok(mut cache) = self.cache.lock() {
-            let now = Instant::now();
-            cache.retain(|_, entry| now.duration_since(entry.created_at) < self.ttl);
         }
     }
 }
@@ -235,29 +227,6 @@ pub mod parallel {
     use crate::utils::proof_helpers::verify_proof_cryptographic;
     use rayon::prelude::*;
 
-    #[derive(Debug, Clone, Copy)]
-    pub enum ProofKind {
-        Range,
-        Equality,
-        Threshold,
-        Membership,
-        Improvement,
-        Consistency,
-    }
-
-    impl ProofKind {
-        fn as_str(&self) -> &'static str {
-            match self {
-                ProofKind::Range => "range",
-                ProofKind::Equality => "equality",
-                ProofKind::Threshold => "threshold",
-                ProofKind::Membership => "membership",
-                ProofKind::Improvement => "improvement",
-                ProofKind::Consistency => "consistency",
-            }
-        }
-    }
-
     /// Verify multiple proofs in parallel with proper type handling
     pub fn verify_proofs_parallel(proofs: &[(Vec<u8>, String)]) -> Vec<bool> {
         proofs
@@ -290,91 +259,5 @@ pub mod parallel {
             return false;
         }
         verify_proof_cryptographic(&proof)
-    }
-
-    // Removed simplified internal verifiers in favor of backend verification
-
-    /// Generate multiple proofs in parallel
-    pub fn generate_proofs_parallel<F, T>(
-        inputs: Vec<T>,
-        proof_fn: F,
-    ) -> Vec<Result<Vec<u8>, String>>
-    where
-        F: Fn(T) -> Result<Vec<u8>, String> + Sync,
-        T: Send,
-    {
-        inputs
-            .into_par_iter()
-            .map(|input| proof_fn(input))
-            .collect()
-    }
-
-    /// Batch verify with early termination on failure
-    pub fn batch_verify_with_early_termination(proofs: &[(Vec<u8>, String)]) -> Result<(), usize> {
-        let results: Vec<(usize, bool)> = proofs
-            .par_iter()
-            .enumerate()
-            .map(|(idx, (proof_data, proof_type))| {
-                (idx, verify_single_proof(proof_data, proof_type))
-            })
-            .collect();
-
-        // Find first failure
-        for (idx, valid) in results {
-            if !valid {
-                return Err(idx);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Safer variant using internal enum to prevent typo bugs at call sites within Rust
-    pub fn verify_proofs_parallel_internal(proofs: &[(Vec<u8>, ProofKind)]) -> Vec<bool> {
-        proofs
-            .par_iter()
-            .map(|(proof_data, kind)| verify_single_proof(proof_data, kind.as_str()))
-            .collect()
-    }
-}
-
-/// Memory pool for reducing allocations
-pub struct MemoryPool {
-    buffers: Arc<Mutex<Vec<Vec<u8>>>>,
-    buffer_size: usize,
-}
-
-impl MemoryPool {
-    pub fn new(initial_capacity: usize, buffer_size: usize) -> Self {
-        let mut buffers = Vec::with_capacity(initial_capacity);
-        for _ in 0..initial_capacity {
-            buffers.push(Vec::with_capacity(buffer_size));
-        }
-
-        MemoryPool {
-            buffers: Arc::new(Mutex::new(buffers)),
-            buffer_size,
-        }
-    }
-
-    pub fn get_buffer(&self) -> Vec<u8> {
-        match self.buffers.lock() {
-            Ok(mut buffers) => buffers
-                .pop()
-                .unwrap_or_else(|| Vec::with_capacity(self.buffer_size)),
-            Err(_) => Vec::with_capacity(self.buffer_size),
-        }
-    }
-
-    pub fn return_buffer(&self, mut buffer: Vec<u8>) {
-        buffer.clear();
-        if buffer.capacity() <= self.buffer_size * 2 {
-            if let Ok(mut buffers) = self.buffers.lock() {
-                if buffers.len() < 100 {
-                    // Limit pool size
-                    buffers.push(buffer);
-                }
-            }
-        }
     }
 }

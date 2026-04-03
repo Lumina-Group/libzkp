@@ -1,15 +1,15 @@
-use crate::backend::snark::SnarkBackend;
+use crate::backend::snark::{SnarkBackend, MAX_SET_SIZE};
 use crate::proof::Proof;
 use crate::utils::commitment::commit_value;
 use crate::utils::error_handling::{ZkpError, ZkpResult};
 use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
+use crate::utils::validation::{validate_membership_params, validate_set_size};
 
 const SCHEME_ID: u8 = 4;
 
 pub fn prove_membership(value: u64, set: Vec<u64>) -> ZkpResult<Vec<u8>> {
-    if set.is_empty() {
-        return Err(ZkpError::InvalidInput("set cannot be empty".to_string()));
-    }
+    validate_membership_params(value, &set)?;
+    validate_set_size(&set, MAX_SET_SIZE)?;
 
     let commitment = commit_value(value);
     let commitment_arr: [u8; 32] = commitment

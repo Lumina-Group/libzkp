@@ -1,8 +1,5 @@
 use crate::utils::error_handling::{ZkpError, ZkpResult};
-use crate::utils::limits::{
-    MAX_BACKEND_OPERATION_LEN, MAX_BACKEND_PAYLOAD_BYTES, MAX_METADATA_ADDITIONAL_BYTES,
-    MAX_U64_VEC_LEN,
-};
+use crate::utils::limits::{MAX_BACKEND_OPERATION_LEN, MAX_BACKEND_PAYLOAD_BYTES, MAX_U64_VEC_LEN};
 
 /// Serialize a vector of u64 values to bytes
 pub fn serialize_u64_vec(values: &[u64]) -> Vec<u8> {
@@ -67,52 +64,6 @@ pub fn deserialize_u64_vec(data: &[u8]) -> ZkpResult<Vec<u64>> {
     Ok(values)
 }
 
-/// Serialize proof metadata
-pub fn serialize_proof_metadata(scheme_id: u8, version: u8, additional_data: &[u8]) -> Vec<u8> {
-    let mut result = Vec::new();
-    result.push(version);
-    result.push(scheme_id);
-    result.extend_from_slice(&(additional_data.len() as u32).to_le_bytes());
-    result.extend_from_slice(additional_data);
-    result
-}
-
-/// Deserialize proof metadata
-pub fn deserialize_proof_metadata(data: &[u8]) -> ZkpResult<(u8, u8, Vec<u8>)> {
-    if data.len() < 6 {
-        return Err(ZkpError::SerializationError(
-            "metadata too short".to_string(),
-        ));
-    }
-
-    let version = data[0];
-    let scheme_id = data[1];
-    let additional_len = match data[2..6].try_into() {
-        Ok(arr) => u32::from_le_bytes(arr) as usize,
-        Err(_) => {
-            return Err(ZkpError::SerializationError(
-                "invalid metadata length".to_string(),
-            ))
-        }
-    };
-    if additional_len > MAX_METADATA_ADDITIONAL_BYTES {
-        return Err(ZkpError::SerializationError(format!(
-            "metadata too large: max {} bytes",
-            MAX_METADATA_ADDITIONAL_BYTES
-        )));
-    }
-
-    if data.len() != 6 + additional_len {
-        return Err(ZkpError::SerializationError(
-            "metadata size mismatch".to_string(),
-        ));
-    }
-
-    let additional_data = data[6..].to_vec();
-
-    Ok((version, scheme_id, additional_data))
-}
-
 /// Create a standardized data payload for backend processing
 pub fn create_backend_payload(operation: &str, params: &[u8]) -> Vec<u8> {
     let mut payload = Vec::new();
@@ -122,7 +73,8 @@ pub fn create_backend_payload(operation: &str, params: &[u8]) -> Vec<u8> {
     if op_bytes.len() > MAX_BACKEND_OPERATION_LEN {
         return Vec::new();
     }
-    if params.len()
+    if params
+        .len()
         .checked_add(8)
         .and_then(|v| v.checked_add(op_bytes.len()))
         .is_none()
@@ -141,7 +93,8 @@ pub fn create_backend_payload(operation: &str, params: &[u8]) -> Vec<u8> {
     payload
 }
 
-/// Parse a backend payload
+/// Parse a backend payload (must match [`create_backend_payload`]:
+/// `[u32 op_len][op bytes][u32 params_len][params bytes]`).
 pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
     if data.len() > MAX_BACKEND_PAYLOAD_BYTES {
         return Err(ZkpError::SerializationError(format!(
@@ -149,7 +102,7 @@ pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
             MAX_BACKEND_PAYLOAD_BYTES
         )));
     }
-    if data.len() < 8 {
+    if data.len() < 4 {
         return Err(ZkpError::SerializationError(
             "payload too short".to_string(),
         ));
@@ -163,7 +116,23 @@ pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
             ))
         }
     };
-    let params_len = match data[4..8].try_into() {
+
+    if op_len > MAX_BACKEND_OPERATION_LEN {
+        return Err(ZkpError::SerializationError(
+            "operation too long".to_string(),
+        ));
+    }
+
+    let op_end = 4usize
+        .checked_add(op_len)
+        .ok_or_else(|| ZkpError::SerializationError("payload size overflow".to_string()))?;
+    if data.len() < op_end.saturating_add(4) {
+        return Err(ZkpError::SerializationError(
+            "truncated before params length".to_string(),
+        ));
+    }
+
+    let params_len = match data[op_end..op_end + 4].try_into() {
         Ok(arr) => u32::from_le_bytes(arr) as usize,
         Err(_) => {
             return Err(ZkpError::SerializationError(
@@ -172,13 +141,8 @@ pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
         }
     };
 
-    if op_len > MAX_BACKEND_OPERATION_LEN {
-        return Err(ZkpError::SerializationError(
-            "operation too long".to_string(),
-        ));
-    }
-    let expected = 8usize
-        .checked_add(op_len)
+    let expected = op_end
+        .checked_add(4)
         .and_then(|v| v.checked_add(params_len))
         .ok_or_else(|| ZkpError::SerializationError("payload size overflow".to_string()))?;
     if data.len() != expected {
@@ -187,128 +151,38 @@ pub fn parse_backend_payload(data: &[u8]) -> ZkpResult<(String, Vec<u8>)> {
         ));
     }
 
-    let operation = String::from_utf8(data[8..8 + op_len].to_vec())
+    let operation = String::from_utf8(data[4..op_end].to_vec())
         .map_err(|_| ZkpError::SerializationError("invalid operation string".to_string()))?;
 
-    let params = data[8 + op_len..].to_vec();
+    let params = data[op_end + 4..].to_vec();
 
     Ok((operation, params))
 }
 
-/// Serialize range parameters
-pub fn serialize_range_params(value: u64, min: u64, max: u64) -> Vec<u8> {
-    let mut result = Vec::new();
-    result.extend_from_slice(&value.to_le_bytes());
-    result.extend_from_slice(&min.to_le_bytes());
-    result.extend_from_slice(&max.to_le_bytes());
-    result
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::limits::MAX_BACKEND_OPERATION_LEN;
 
-/// Deserialize range parameters
-pub fn deserialize_range_params(data: &[u8]) -> ZkpResult<(u64, u64, u64)> {
-    if data.len() != 24 {
-        return Err(ZkpError::SerializationError(
-            "invalid range params size".to_string(),
-        ));
+    #[test]
+    fn backend_payload_roundtrip() {
+        let p = create_backend_payload("range_proof", &[1u8, 2, 3]);
+        let (op, params) = parse_backend_payload(&p).unwrap();
+        assert_eq!(op, "range_proof");
+        assert_eq!(params, vec![1u8, 2, 3]);
     }
 
-    let value = u64::from_le_bytes(
-        data[0..8]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid value field".to_string()))?,
-    );
-    let min = u64::from_le_bytes(
-        data[8..16]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid min field".to_string()))?,
-    );
-    let max = u64::from_le_bytes(
-        data[16..24]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid max field".to_string()))?,
-    );
-
-    Ok((value, min, max))
-}
-
-/// Serialize threshold parameters
-pub fn serialize_threshold_params(values: &[u64], threshold: u64) -> Vec<u8> {
-    let mut result = Vec::new();
-    result.extend_from_slice(&threshold.to_le_bytes());
-    result.extend_from_slice(&serialize_u64_vec(values));
-    result
-}
-
-/// Deserialize threshold parameters
-pub fn deserialize_threshold_params(data: &[u8]) -> ZkpResult<(Vec<u64>, u64)> {
-    if data.len() < 8 {
-        return Err(ZkpError::SerializationError(
-            "threshold params too short".to_string(),
-        ));
+    #[test]
+    fn backend_payload_rejects_long_operation() {
+        let op = "a".repeat(MAX_BACKEND_OPERATION_LEN + 1);
+        let p = create_backend_payload(&op, &[]);
+        assert!(p.is_empty());
     }
 
-    let threshold = u64::from_le_bytes(
-        data[0..8]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid threshold field".to_string()))?,
-    );
-    let values = deserialize_u64_vec(&data[8..])?;
-
-    Ok((values, threshold))
-}
-
-/// Serialize improvement parameters
-pub fn serialize_improvement_params(old: u64, new: u64) -> Vec<u8> {
-    let mut result = Vec::new();
-    result.extend_from_slice(&old.to_le_bytes());
-    result.extend_from_slice(&new.to_le_bytes());
-    result
-}
-
-/// Deserialize improvement parameters
-pub fn deserialize_improvement_params(data: &[u8]) -> ZkpResult<(u64, u64)> {
-    if data.len() != 16 {
-        return Err(ZkpError::SerializationError(
-            "invalid improvement params size".to_string(),
-        ));
+    #[test]
+    fn u64_vec_roundtrip() {
+        let v = vec![1u64, 2, 3];
+        let b = serialize_u64_vec(&v);
+        assert_eq!(deserialize_u64_vec(&b).unwrap(), v);
     }
-
-    let old = u64::from_le_bytes(
-        data[0..8]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid old field".to_string()))?,
-    );
-    let new = u64::from_le_bytes(
-        data[8..16]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid new field".to_string()))?,
-    );
-
-    Ok((old, new))
-}
-
-/// Serialize membership parameters
-pub fn serialize_membership_params(value: u64, set: &[u64]) -> Vec<u8> {
-    let mut result = Vec::new();
-    result.extend_from_slice(&value.to_le_bytes());
-    result.extend_from_slice(&serialize_u64_vec(set));
-    result
-}
-
-/// Deserialize membership parameters
-pub fn deserialize_membership_params(data: &[u8]) -> ZkpResult<(u64, Vec<u64>)> {
-    if data.len() < 8 {
-        return Err(ZkpError::SerializationError(
-            "membership params too short".to_string(),
-        ));
-    }
-
-    let value = u64::from_le_bytes(
-        data[0..8]
-            .try_into()
-            .map_err(|_| ZkpError::SerializationError("invalid value field".to_string()))?,
-    );
-    let set = deserialize_u64_vec(&data[8..])?;
-
-    Ok((value, set))
 }

@@ -208,19 +208,13 @@ pub fn prove_range_cached(value: u64, min: u64, max: u64) -> ZkpResult<Vec<u8>> 
     Ok(proof)
 }
 
-/// Equality proof with optional context extension
-pub fn prove_equality_advanced(
-    val1: u64,
-    val2: u64,
-    context: Option<Vec<u8>>,
-) -> ZkpResult<Vec<u8>> {
+/// Equality proof (same semantics as [`crate::proof::equality_proof::prove_equality`]).
+pub fn prove_equality_advanced(val1: u64, val2: u64) -> ZkpResult<Vec<u8>> {
     if val1 != val2 {
         return Err(ZkpError::InvalidInput("values must be equal".to_string()));
     }
 
-    let proof = crate::proof::equality_proof::prove_equality(val1, val2)?;
-    let _ = context;
-    Ok(proof)
+    crate::proof::equality_proof::prove_equality(val1, val2)
 }
 
 /// Verify multiple proofs in parallel using utility helper
@@ -344,7 +338,8 @@ pub fn prove_threshold_optimized(values: Vec<u64>, threshold: u64) -> ZkpResult<
     crate::proof::threshold_proof::prove_threshold(values, threshold)
 }
 
-/// Validate a chain of proofs for structural integrity
+/// Returns true if every element deserializes as a valid [`Proof`] framing (version/length).
+/// Does **not** verify cryptographic soundness or logical links between proofs.
 pub fn validate_proof_chain(proof_chain: Vec<Vec<u8>>) -> ZkpResult<bool> {
     if proof_chain.is_empty() {
         return Ok(true);

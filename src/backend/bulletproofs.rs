@@ -7,6 +7,42 @@ use rand::rngs::OsRng;
 use rand::RngCore;
 use sha2::{Digest, Sha256};
 
+/// Bulletproofs backend wire format (no ambiguous delimiters):
+/// `[u32 proof_body_len][proof_body][u32=32][32 byte commitment]`.
+fn encode_proof_body_with_commit(proof_body: &[u8], commit: &[u8]) -> Result<Vec<u8>, String> {
+    if commit.len() != 32 {
+        return Err("commitment must be 32 bytes".to_string());
+    }
+    let mut out = Vec::with_capacity(4 + proof_body.len() + 4 + 32);
+    out.extend_from_slice(&(proof_body.len() as u32).to_le_bytes());
+    out.extend_from_slice(proof_body);
+    out.extend_from_slice(&(32u32).to_le_bytes());
+    out.extend_from_slice(commit);
+    Ok(out)
+}
+
+fn decode_proof_body_and_commit(data: &[u8]) -> Option<(&[u8], &[u8])> {
+    if data.len() < 4 + 4 + 32 {
+        return None;
+    }
+    let plen = u32::from_le_bytes(data.get(0..4)?.try_into().ok()?) as usize;
+    let proof_end = 4usize.checked_add(plen)?;
+    if data.len() < proof_end.checked_add(4)?.checked_add(32)? {
+        return None;
+    }
+    let clen = u32::from_le_bytes(data.get(proof_end..proof_end + 4)?.try_into().ok()?) as usize;
+    if clen != 32 {
+        return None;
+    }
+    if data.len() != proof_end + 4 + 32 {
+        return None;
+    }
+    Some((
+        data.get(4..proof_end)?,
+        data.get(proof_end + 4..proof_end + 4 + 32)?,
+    ))
+}
+
 pub struct BulletproofsBackend;
 
 impl BulletproofsBackend {
@@ -71,36 +107,19 @@ impl BulletproofsBackend {
         proof_bytes.extend_from_slice(diff_min_commit.as_bytes());
         proof_bytes.extend_from_slice(diff_max_commit.as_bytes());
 
-        let mut result = Vec::new();
-        result.extend_from_slice(&proof_bytes);
-        result.extend_from_slice(b"COMMIT:");
-        result.extend_from_slice(value_commit.as_bytes());
-
-        Ok(result)
+        encode_proof_body_with_commit(&proof_bytes, value_commit.as_bytes())
     }
 
     pub fn verify_range_with_bounds(proof_data: &[u8], min: u64, max: u64) -> bool {
-        let commit_marker = b"COMMIT:";
-        let commit_pos = match proof_data
-            .windows(commit_marker.len())
-            .position(|window| window == commit_marker)
-        {
-            Some(pos) => pos,
+        let (proof_bytes, commit_slice) = match decode_proof_body_and_commit(proof_data) {
+            Some(p) => p,
             None => return false,
         };
 
-        let proof_bytes = &proof_data[0..commit_pos];
-        let commit_start = commit_pos + commit_marker.len();
-
-        if proof_data.len() < commit_start + 32 {
-            return false;
-        }
-
-        let value_commit =
-            match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-                Ok(c) => c,
-                Err(_) => return false,
-            };
+        let value_commit = match CompressedRistretto::from_slice(commit_slice) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
         let value_commit_point: RistrettoPoint = match value_commit.decompress() {
             Some(p) => p,
             None => return false,
@@ -269,12 +288,7 @@ impl BulletproofsBackend {
 
         proof_bytes.extend_from_slice(diff_commit.as_bytes());
 
-        let mut result = Vec::new();
-        result.extend_from_slice(&proof_bytes);
-        result.extend_from_slice(b"COMMIT:");
-        result.extend_from_slice(sum_commit.as_bytes());
-
-        Ok(result)
+        encode_proof_body_with_commit(&proof_bytes, sum_commit.as_bytes())
     }
 
     pub fn prove_consistency(data: Vec<u64>) -> Result<Vec<u8>, String> {
@@ -350,27 +364,14 @@ impl BulletproofsBackend {
         }
         let commitment_digest: [u8; 32] = Sha256::digest(&commitment_bytes).into();
 
-        let mut result = Vec::new();
-        result.extend_from_slice(&proof_bytes);
-        result.extend_from_slice(b"COMMIT:");
-        result.extend_from_slice(&commitment_digest);
-
-        Ok(result)
+        encode_proof_body_with_commit(&proof_bytes, commitment_digest.as_slice())
     }
 
     pub fn verify_consistency(proof_data: &[u8]) -> bool {
-        let commit_marker = b"COMMIT:";
-        let commit_pos = match proof_data
-            .windows(commit_marker.len())
-            .position(|window| window == commit_marker)
-        {
-            Some(pos) => pos,
+        let (proof_bytes, commitment_hash) = match decode_proof_body_and_commit(proof_data) {
+            Some(p) => p,
             None => return false,
         };
-
-        let proof_bytes = &proof_data[0..commit_pos];
-        let commit_start = commit_pos + commit_marker.len();
-        let commitment_hash = &proof_data[commit_start..];
         if commitment_hash.len() != 32 {
             return false;
         }
@@ -478,25 +479,10 @@ impl BulletproofsBackend {
     }
 
     pub fn verify_threshold(proof_data: &[u8], threshold: u64) -> bool {
-        let commit_marker = b"COMMIT:";
-        let commit_pos = proof_data
-            .windows(commit_marker.len())
-            .position(|window| window == commit_marker);
-
-        let commit_pos = match commit_pos {
-            Some(pos) => pos,
+        let (proof_bytes, sum_commit_slice) = match decode_proof_body_and_commit(proof_data) {
+            Some(p) => p,
             None => return false,
         };
-
-        let proof_bytes = &proof_data[0..commit_pos];
-        let commit_start = commit_pos + commit_marker.len();
-
-        if proof_data.len() < commit_start + 32 {
-            return false;
-        }
-
-        let _sum_commit =
-            CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]);
 
         let mut reader = proof_bytes;
 
@@ -544,11 +530,10 @@ impl BulletproofsBackend {
         let bp_gens = BulletproofGens::new(64, 2);
 
         // Recompute expected diff commit from sum commit and threshold linkage
-        let sum_commit =
-            match CompressedRistretto::from_slice(&proof_data[commit_start..commit_start + 32]) {
-                Ok(c) => c,
-                Err(_) => return false,
-            };
+        let sum_commit = match CompressedRistretto::from_slice(sum_commit_slice) {
+            Ok(c) => c,
+            Err(_) => return false,
+        };
         let sum_commit_point = match sum_commit.decompress() {
             Some(p) => p,
             None => return false,
@@ -632,5 +617,27 @@ impl ZkpBackend for BulletproofsBackend {
         proof
             .verify_single(&bp_gens, &pc_gens, &mut transcript, &commit, 64)
             .is_ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bulletproofs_wire_encode_decode_roundtrip() {
+        let body = b"hello proof body".to_vec();
+        let commit = [7u8; 32];
+        let w = encode_proof_body_with_commit(&body, &commit).unwrap();
+        let (db, cc) = decode_proof_body_and_commit(&w).unwrap();
+        assert_eq!(db, body.as_slice());
+        assert_eq!(cc, commit.as_slice());
+    }
+
+    #[test]
+    fn prove_range_roundtrip() {
+        let p = BulletproofsBackend::prove_range_with_bounds(5, 0, 10).unwrap();
+        assert!(BulletproofsBackend::verify_range_with_bounds(&p, 0, 10));
+        assert!(!BulletproofsBackend::verify_range_with_bounds(&p, 0, 4));
     }
 }

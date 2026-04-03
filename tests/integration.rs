@@ -58,3 +58,31 @@ fn benchmark_numeric_smoke() {
     let m = benchmark_proof_generation_numeric("range".to_string(), 2).expect("bench");
     assert!(m.contains_key("avg_time_ms"));
 }
+
+#[test]
+fn range_prove_rejects_out_of_range() {
+    assert!(range_proof::prove_range(100, 0, 10).is_err());
+}
+
+#[test]
+fn verify_rejects_tampered_range_proof() {
+    let mut proof = range_proof::prove_range(7, 0, 10).expect("prove");
+    if proof.len() > 12 {
+        proof[12] ^= 0xFF;
+    }
+    assert!(!range_proof::verify_range(proof, 0, 10));
+}
+
+#[test]
+fn equality_verify_rejects_mismatched_public_values() {
+    let proof = equality_proof::prove_equality(3, 3).expect("prove");
+    assert!(!equality_proof::verify_equality(proof, 3, 4));
+}
+
+#[test]
+fn composite_rejects_trailing_bytes() {
+    let a = range_proof::prove_range(5, 0, 10).unwrap();
+    let mut bytes = create_composite_proof(vec![a]).expect("composite");
+    bytes.push(0x01);
+    assert!(verify_composite_proof(bytes).is_err());
+}

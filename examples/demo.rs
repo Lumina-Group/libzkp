@@ -23,8 +23,7 @@ fn main() -> Result<(), ZkpError> {
 
     // 3) Threshold proof
     let threshold_proof = libzkp::proof::threshold_proof::prove_threshold(vec![1, 2, 3], 5)?;
-    let threshold_ok =
-        libzkp::proof::threshold_proof::verify_threshold(threshold_proof.clone(), 5);
+    let threshold_ok = libzkp::proof::threshold_proof::verify_threshold(threshold_proof.clone(), 5);
     println!("threshold_ok={}", threshold_ok);
 
     // 4) Set membership proof (Groth16)

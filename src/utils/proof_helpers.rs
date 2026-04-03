@@ -1,6 +1,6 @@
 use crate::backend::ZkpBackend;
 use crate::backend::{
-    bulletproofs::BulletproofsBackend, snark::MAX_SET_SIZE, snark::SnarkBackend,
+    bulletproofs::BulletproofsBackend, snark::SnarkBackend, snark::MAX_SET_SIZE,
     stark::StarkBackend,
 };
 use crate::proof::{Proof, PROOF_VERSION};
@@ -35,7 +35,8 @@ pub fn parse_and_validate_proof(proof_bytes: &[u8], expected_scheme: u8) -> ZkpR
     Ok(proof)
 }
 
-/// Extract proof and commitment from bulletproofs backend output
+/// Extract proof body and commitment from bulletproofs backend output
+/// (`[u32 len][proof_body][u32=32][32 byte commit]`).
 pub fn extract_bulletproofs_components(backend_proof: &[u8]) -> ZkpResult<(Vec<u8>, Vec<u8>)> {
     if backend_proof.len() > MAX_BULLETPROOFS_BACKEND_PROOF_BYTES {
         return Err(ZkpError::InvalidProofFormat(format!(
@@ -43,31 +44,54 @@ pub fn extract_bulletproofs_components(backend_proof: &[u8]) -> ZkpResult<(Vec<u
             MAX_BULLETPROOFS_BACKEND_PROOF_BYTES
         )));
     }
-    let commit_marker = b"COMMIT:";
-    let commit_pos = backend_proof
-        .windows(commit_marker.len())
-        .position(|window| window == commit_marker)
-        .ok_or_else(|| ZkpError::InvalidProofFormat("missing commitment marker".to_string()))?;
-
-    let proof_bytes = &backend_proof[0..commit_pos];
-    let commit_start = commit_pos + commit_marker.len();
-
-    if backend_proof.len() < commit_start + 32 {
+    if backend_proof.len() < 4 + 4 + 32 {
         return Err(ZkpError::InvalidProofFormat(
-            "invalid commitment size".to_string(),
+            "bulletproofs backend payload too short".to_string(),
+        ));
+    }
+    let plen = u32::from_le_bytes(
+        backend_proof[0..4]
+            .try_into()
+            .map_err(|_| ZkpError::InvalidProofFormat("invalid proof length prefix".to_string()))?,
+    ) as usize;
+    let proof_end = 4usize
+        .checked_add(plen)
+        .ok_or_else(|| ZkpError::InvalidProofFormat("proof length overflow".to_string()))?;
+    if backend_proof.len() < proof_end + 4 + 32 {
+        return Err(ZkpError::InvalidProofFormat(
+            "truncated bulletproofs backend payload".to_string(),
+        ));
+    }
+    let clen = u32::from_le_bytes(
+        backend_proof[proof_end..proof_end + 4]
+            .try_into()
+            .map_err(|_| {
+                ZkpError::InvalidProofFormat("invalid commit length prefix".to_string())
+            })?,
+    ) as usize;
+    if clen != 32 {
+        return Err(ZkpError::InvalidProofFormat(
+            "invalid commitment length (expected 32)".to_string(),
+        ));
+    }
+    if backend_proof.len() != proof_end + 4 + 32 {
+        return Err(ZkpError::InvalidProofFormat(
+            "trailing bytes in bulletproofs backend payload".to_string(),
         ));
     }
 
-    let commitment = backend_proof[commit_start..commit_start + 32].to_vec();
+    let proof_bytes = backend_proof[4..proof_end].to_vec();
+    let commitment = backend_proof[proof_end + 4..proof_end + 4 + 32].to_vec();
 
-    Ok((proof_bytes.to_vec(), commitment))
+    Ok((proof_bytes, commitment))
 }
 
-/// Reconstruct bulletproofs backend format from proof components
+/// Reconstruct bulletproofs backend wire format from proof components.
 pub fn reconstruct_bulletproofs_proof(proof_bytes: &[u8], commitment: &[u8]) -> Vec<u8> {
-    let mut backend_proof = Vec::new();
+    let mut backend_proof = Vec::with_capacity(4 + proof_bytes.len() + 4 + 32);
+    backend_proof.extend_from_slice(&(proof_bytes.len() as u32).to_le_bytes());
     backend_proof.extend_from_slice(proof_bytes);
-    backend_proof.extend_from_slice(b"COMMIT:");
+    backend_proof.extend_from_slice(&(32u32).to_le_bytes());
     backend_proof.extend_from_slice(commitment);
     backend_proof
 }
@@ -190,30 +214,30 @@ pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
             SnarkBackend::verify_membership_zk(snark_bytes, &set, &proof.commitment)
         }
         5 => {
-            if proof.commitment.len() != 16 {
+            if proof.commitment.len() != 32 || proof.proof.len() < 16 {
                 return false;
             }
-            let diff_bytes: [u8; 8] = match proof.commitment[0..8].try_into() {
-                Ok(arr) => arr,
+            let old = match proof.proof[0..8].try_into() {
+                Ok(arr) => u64::from_le_bytes(arr),
                 Err(_) => return false,
             };
-            let new_bytes: [u8; 8] = match proof.commitment[8..16].try_into() {
-                Ok(arr) => arr,
+            let new = match proof.proof[8..16].try_into() {
+                Ok(arr) => u64::from_le_bytes(arr),
                 Err(_) => return false,
             };
-            let diff = u64::from_le_bytes(diff_bytes);
-            let new = u64::from_le_bytes(new_bytes);
-            if diff == 0 {
+            if crate::utils::commitment::validate_improvement_commitment(
+                &proof.commitment,
+                old,
+                new,
+            )
+            .is_err()
+            {
                 return false;
             }
-            let old = match new.checked_sub(diff) {
-                Some(v) => v,
-                None => return false,
-            };
             let mut data = Vec::with_capacity(16);
             data.extend_from_slice(&old.to_le_bytes());
             data.extend_from_slice(&new.to_le_bytes());
-            StarkBackend::verify(&proof.proof, &data)
+            StarkBackend::verify(&proof.proof[16..], &data)
         }
         6 => {
             let backend_proof = reconstruct_bulletproofs_proof(&proof.proof, &proof.commitment);

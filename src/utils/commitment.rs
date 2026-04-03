@@ -39,7 +39,7 @@ pub fn verify_commitment_values(commitment: &[u8], values: &[u64]) -> bool {
     commitment == expected
 }
 
-/// Create a commitment for improvement proof (difference and new value)
+/// Create a 32-byte SHA-256 commitment binding `(old, new)` for improvement proofs.
 pub fn commit_improvement(old: u64, new: u64) -> ZkpResult<Vec<u8>> {
     if new <= old {
         return Err(ZkpError::InvalidInput(
@@ -47,52 +47,26 @@ pub fn commit_improvement(old: u64, new: u64) -> ZkpResult<Vec<u8>> {
         ));
     }
 
-    let diff = new - old;
-    let mut commitment = Vec::new();
-    commitment.extend_from_slice(&diff.to_le_bytes());
-    commitment.extend_from_slice(&new.to_le_bytes());
-    Ok(commitment)
+    let mut hasher = Sha256::new();
+    hasher.update(b"libzkp_improvement_v1");
+    hasher.update(&old.to_le_bytes());
+    hasher.update(&new.to_le_bytes());
+    Ok(hasher.finalize().to_vec())
 }
 
-/// Extract improvement values from commitment
-pub fn extract_improvement_values(commitment: &[u8]) -> ZkpResult<(u64, u64)> {
-    if commitment.len() != 16 {
+/// Validate that `commitment` matches the expected SHA-256 binding for `(old, new)`.
+pub fn validate_improvement_commitment(commitment: &[u8], old: u64, new: u64) -> ZkpResult<()> {
+    if commitment.len() != 32 {
         return Err(ZkpError::InvalidProofFormat(
             "invalid improvement commitment size".to_string(),
         ));
     }
 
-    let diff_bytes: [u8; 8] = commitment[0..8].try_into().map_err(|_| {
-        ZkpError::InvalidProofFormat("invalid improvement commitment encoding".to_string())
-    })?;
-    let new_bytes: [u8; 8] = commitment[8..16].try_into().map_err(|_| {
-        ZkpError::InvalidProofFormat("invalid improvement commitment encoding".to_string())
-    })?;
-    let diff = u64::from_le_bytes(diff_bytes);
-    let new = u64::from_le_bytes(new_bytes);
-
-    if diff == 0 {
+    let expected = commit_improvement(old, new)?;
+    if commitment != expected.as_slice() {
         return Err(ZkpError::InvalidProofFormat(
-            "improvement difference cannot be zero".to_string(),
+            "improvement commitment mismatch".to_string(),
         ));
     }
-
-    Ok((diff, new))
-}
-
-/// Validate improvement commitment against old value
-pub fn validate_improvement_commitment(commitment: &[u8], old: u64) -> ZkpResult<u64> {
-    let (diff, new) = extract_improvement_values(commitment)?;
-
-    let calculated_new = old.checked_add(diff).ok_or_else(|| {
-        ZkpError::InvalidProofFormat("integer overflow in improvement calculation".to_string())
-    })?;
-
-    if new != calculated_new {
-        return Err(ZkpError::InvalidProofFormat(
-            "inconsistent improvement values".to_string(),
-        ));
-    }
-
-    Ok(new)
+    Ok(())
 }

@@ -131,9 +131,9 @@ pub fn set_snark_key_dir(path: &str) -> Result<(), ZkpError> {
     }
 
     let requested = PathBuf::from(path);
-    let mut guard = SNARK_KEY_DIR_OVERRIDE.lock().map_err(|_| {
-        ZkpError::ConfigError("SNARK key directory lock poisoned".to_string())
-    })?;
+    let mut guard = SNARK_KEY_DIR_OVERRIDE
+        .lock()
+        .map_err(|_| ZkpError::ConfigError("SNARK key directory lock poisoned".to_string()))?;
     if let Some(existing) = guard.as_ref() {
         if existing != &requested {
             return Err(ZkpError::ConfigError(format!(
@@ -146,8 +146,8 @@ pub fn set_snark_key_dir(path: &str) -> Result<(), ZkpError> {
         *guard = Some(requested.clone());
     }
 
-    // Keep environment variable in sync for child processes/tools.
-    env::set_var("LIBZKP_SNARK_KEY_DIR", &requested);
+    // Do not call `env::set_var` here: it is unsafe in multi-threaded programs (Rust 2024+).
+    // Child processes should receive `LIBZKP_SNARK_KEY_DIR` via the parent environment if needed.
     Ok(())
 }
 
@@ -624,5 +624,20 @@ impl ZkpBackend for SnarkBackend {
 
     fn verify(proof: &[u8], data: &[u8]) -> bool {
         Self::verify_equality_zk(proof, data)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::commitment::commit_value;
+
+    #[test]
+    fn groth16_equality_roundtrip() {
+        let hash: [u8; 32] = commit_value(42).try_into().expect("32-byte commitment");
+        let proof = SnarkBackend::prove_equality_zk(42, 42, hash);
+        assert!(!proof.is_empty());
+        assert!(SnarkBackend::verify_equality_zk(&proof, &hash));
+        assert!(!SnarkBackend::verify_equality_zk(&proof, &[0u8; 32]));
     }
 }

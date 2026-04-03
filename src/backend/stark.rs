@@ -249,3 +249,18 @@ impl ZkpBackend for StarkBackend {
         Self::verify_improvement(proof, old, new).unwrap_or(false)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stark_improvement_zkpbackend_roundtrip() {
+        let mut data = Vec::with_capacity(16);
+        data.extend_from_slice(&1u64.to_le_bytes());
+        data.extend_from_slice(&8u64.to_le_bytes());
+        let proof = StarkBackend::prove(&data);
+        assert!(!proof.is_empty());
+        assert!(StarkBackend::verify(&proof, &data));
+    }
+}

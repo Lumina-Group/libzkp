@@ -20,15 +20,14 @@ fn prove_equality(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
 
 #[pyfunction]
 fn verify_equality(proof: Vec<u8>, val1: u64, val2: u64) -> PyResult<bool> {
-    Ok(crate::proof::equality_proof::verify_equality(proof, val1, val2))
+    Ok(crate::proof::equality_proof::verify_equality(
+        proof, val1, val2,
+    ))
 }
 
 #[pyfunction]
 fn verify_equality_with_commitment(proof: Vec<u8>, expected_commitment: Vec<u8>) -> PyResult<bool> {
-    Ok(crate::proof::equality_proof::verify_equality_with_commitment(
-        proof,
-        expected_commitment,
-    ))
+    Ok(crate::proof::equality_proof::verify_equality_with_commitment(proof, expected_commitment))
 }
 
 #[pyfunction]
@@ -38,7 +37,9 @@ fn prove_threshold(values: Vec<u64>, threshold: u64) -> PyResult<Vec<u8>> {
 
 #[pyfunction]
 fn verify_threshold(proof: Vec<u8>, threshold: u64) -> PyResult<bool> {
-    Ok(crate::proof::threshold_proof::verify_threshold(proof, threshold))
+    Ok(crate::proof::threshold_proof::verify_threshold(
+        proof, threshold,
+    ))
 }
 
 #[pyfunction]
@@ -58,7 +59,9 @@ fn prove_improvement(old: u64, new: u64) -> PyResult<Vec<u8>> {
 
 #[pyfunction]
 fn verify_improvement(proof: Vec<u8>, old: u64) -> PyResult<bool> {
-    Ok(crate::proof::improvement_proof::verify_improvement(proof, old))
+    Ok(crate::proof::improvement_proof::verify_improvement(
+        proof, old,
+    ))
 }
 
 #[pyfunction]
@@ -133,12 +136,8 @@ fn prove_range_cached(value: u64, min: u64, max: u64) -> PyResult<Vec<u8>> {
 }
 
 #[pyfunction]
-fn prove_equality_advanced(
-    val1: u64,
-    val2: u64,
-    context: Option<Vec<u8>>,
-) -> PyResult<Vec<u8>> {
-    crate::advanced::prove_equality_advanced(val1, val2, context).map_err(Into::into)
+fn prove_equality_advanced(val1: u64, val2: u64) -> PyResult<Vec<u8>> {
+    crate::advanced::prove_equality_advanced(val1, val2).map_err(Into::into)
 }
 
 #[pyfunction]
@@ -197,11 +196,7 @@ fn batch_add_equality_proof(batch_id: usize, val1: u64, val2: u64) -> PyResult<(
 }
 
 #[pyfunction]
-fn batch_add_threshold_proof(
-    batch_id: usize,
-    values: Vec<u64>,
-    threshold: u64,
-) -> PyResult<()> {
+fn batch_add_threshold_proof(batch_id: usize, values: Vec<u64>, threshold: u64) -> PyResult<()> {
     crate::advanced::batch_add_threshold_proof(batch_id, values, threshold).map_err(Into::into)
 }
 

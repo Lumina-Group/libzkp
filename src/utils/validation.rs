@@ -95,47 +95,6 @@ pub fn validate_consistency_params(data: &[u64]) -> ZkpResult<()> {
     Ok(())
 }
 
-/// Validate proof data format
-pub fn validate_proof_data(data: &[u8], min_size: usize) -> ZkpResult<()> {
-    if data.len() < min_size {
-        return Err(ZkpError::InvalidProofFormat(format!(
-            "proof data too short: expected at least {} bytes, got {}",
-            min_size,
-            data.len()
-        )));
-    }
-    Ok(())
-}
-
-/// Validate commitment format
-pub fn validate_commitment_format(commitment: &[u8], expected_size: usize) -> ZkpResult<()> {
-    if commitment.len() != expected_size {
-        return Err(ZkpError::InvalidProofFormat(format!(
-            "invalid commitment size: expected {} bytes, got {}",
-            expected_size,
-            commitment.len()
-        )));
-    }
-    Ok(())
-}
-
-/// Validate that a set has no duplicates
-pub fn validate_unique_set(set: &[u64]) -> ZkpResult<()> {
-    let mut sorted_set = set.to_vec();
-    sorted_set.sort_unstable();
-
-    for window in sorted_set.windows(2) {
-        if window[0] == window[1] {
-            return Err(ZkpError::InvalidInput(format!(
-                "duplicate value {} found in set",
-                window[0]
-            )));
-        }
-    }
-
-    Ok(())
-}
-
 /// Validate maximum set size
 pub fn validate_set_size(set: &[u64], max_size: usize) -> ZkpResult<()> {
     if set.len() > max_size {
@@ -143,17 +102,6 @@ pub fn validate_set_size(set: &[u64], max_size: usize) -> ZkpResult<()> {
             "set size {} exceeds maximum allowed size {}",
             set.len(),
             max_size
-        )));
-    }
-    Ok(())
-}
-
-/// Validate value bounds
-pub fn validate_value_bounds(value: u64, max_value: u64) -> ZkpResult<()> {
-    if value > max_value {
-        return Err(ZkpError::InvalidInput(format!(
-            "value {} exceeds maximum allowed value {}",
-            value, max_value
         )));
     }
     Ok(())

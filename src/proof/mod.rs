@@ -1,4 +1,4 @@
-pub const PROOF_VERSION: u8 = 1;
+pub const PROOF_VERSION: u8 = 2;
 
 #[derive(Debug, Clone)]
 pub struct Proof {
@@ -51,9 +51,7 @@ impl Proof {
         if proof_len > MAX_PROOF_PAYLOAD_BYTES || comm_len > MAX_COMMITMENT_BYTES {
             return None;
         }
-        let total = 10usize
-            .checked_add(proof_len)?
-            .checked_add(comm_len)?;
+        let total = 10usize.checked_add(proof_len)?.checked_add(comm_len)?;
         if data.len() != total {
             return None;
         }
