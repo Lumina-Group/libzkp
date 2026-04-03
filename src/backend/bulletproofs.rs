@@ -90,6 +90,15 @@ fn parse_compressed_32(slice: &[u8]) -> Option<CompressedRistretto> {
     CompressedRistretto::from_slice(slice.get(..32)?).ok()
 }
 
+/// `2^n_bits - 1` for valid Bulletproofs bit widths. `1u64 << 64` is not allowed in Rust, so `n_bits >= 64` maps to `u64::MAX`.
+fn max_u64_for_bit_width(n_bits: usize) -> u64 {
+    if n_bits >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << n_bits).saturating_sub(1)
+    }
+}
+
 pub struct BulletproofsBackend;
 
 impl BulletproofsBackend {
@@ -109,7 +118,7 @@ impl BulletproofsBackend {
         if value < min || value > max {
             return Err("value out of range".to_string());
         }
-        let max_diff = (1u64 << n_bits).saturating_sub(1);
+        let max_diff = max_u64_for_bit_width(n_bits);
         let diff_min = value - min;
         let diff_max = max - value;
         if diff_min > max_diff || diff_max > max_diff {
@@ -319,7 +328,7 @@ impl BulletproofsBackend {
         }
 
         let diff = sum - threshold;
-        let max_diff = (1u64 << n_bits).saturating_sub(1);
+        let max_diff = max_u64_for_bit_width(n_bits);
         if diff > max_diff {
             return Err(format!(
                 "sum - threshold exceeds {}-bit capacity; use n_bits=64",
