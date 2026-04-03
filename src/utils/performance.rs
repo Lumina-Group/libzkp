@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-/// Simple LRU cache for proof results
+/// Simple TTL cache with LFU-style eviction when at capacity (not LRU).
 pub struct ProofCache {
     cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
     max_size: usize,
@@ -248,8 +248,8 @@ pub mod parallel {
     /// Verify a single proof: `proof_type` must match the encoded scheme id.
     fn verify_single_proof(proof_data: &[u8], proof_type: &str) -> bool {
         let proof = match Proof::from_bytes(proof_data) {
-            Some(p) => p,
-            None => return false,
+            Ok(p) => p,
+            Err(_) => return false,
         };
 
         if proof.version != PROOF_VERSION {

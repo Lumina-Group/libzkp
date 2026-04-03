@@ -15,7 +15,7 @@ pub fn prove_range(value: u64, min: u64, max: u64) -> ZkpResult<Vec<u8>> {
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;
 
-    create_proof(SCHEME_ID, proof_bytes, commitment)
+    Ok(create_proof(SCHEME_ID, proof_bytes, commitment))
 }
 
 pub fn verify_range(proof: Vec<u8>, min: u64, max: u64) -> bool {

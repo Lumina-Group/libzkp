@@ -1,5 +1,6 @@
 pub mod commitment;
 pub mod composition;
+pub mod encoding;
 pub mod error_handling;
 pub mod limits;
 pub mod performance;
@@ -9,6 +10,7 @@ pub mod validation;
 
 pub use commitment::*;
 pub use composition::*;
+pub use encoding::*;
 pub use error_handling::*;
 pub use limits::*;
 pub use performance::*;

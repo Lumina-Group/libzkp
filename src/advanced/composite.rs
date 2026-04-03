@@ -16,8 +16,7 @@ pub fn create_composite_proof(proof_list: Vec<Vec<u8>>) -> ZkpResult<Vec<u8>> {
 
     let mut proofs = Vec::new();
     for proof_bytes in proof_list {
-        let proof = Proof::from_bytes(&proof_bytes)
-            .ok_or_else(|| ZkpError::InvalidProofFormat("invalid proof in list".to_string()))?;
+        let proof = Proof::from_bytes(&proof_bytes)?;
         proofs.push(proof);
     }
 
@@ -42,8 +41,7 @@ pub fn create_proof_with_metadata(
     proof_data: Vec<u8>,
     metadata: HashMap<String, Vec<u8>>,
 ) -> ZkpResult<Vec<u8>> {
-    let proof = Proof::from_bytes(&proof_data)
-        .ok_or_else(|| ZkpError::InvalidProofFormat("invalid proof data".to_string()))?;
+    let proof = Proof::from_bytes(&proof_data)?;
 
     let mut composite = CompositeProof::new(vec![proof])?;
 

@@ -20,9 +20,6 @@ pub const MAX_BACKEND_PAYLOAD_BYTES: usize = 256 * 1024; // 256 KiB
 /// Maximum length (in bytes) accepted for the backend operation string.
 pub const MAX_BACKEND_OPERATION_LEN: usize = 64;
 
-/// Maximum additional metadata payload length (in bytes).
-pub const MAX_METADATA_ADDITIONAL_BYTES: usize = 64 * 1024; // 64 KiB
-
 /// Maximum size (in bytes) accepted for a serialized `CompositeProof`.
 pub const MAX_COMPOSITE_PROOF_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
 

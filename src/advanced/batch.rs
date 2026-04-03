@@ -52,9 +52,7 @@ pub fn batch_add_range_proof(batch_id: usize, value: u64, min: u64, max: u64) ->
 
 /// Add an equality proof operation to the batch
 pub fn batch_add_equality_proof(batch_id: usize, val1: u64, val2: u64) -> ZkpResult<()> {
-    if val1 != val2 {
-        return Err(ZkpError::InvalidInput("values must be equal".to_string()));
-    }
+    validation::validate_equality_params(val1, val2)?;
     with_batch_mut(batch_id, |batch| batch.add_equality_proof(val1, val2))
 }
 

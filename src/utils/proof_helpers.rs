@@ -15,8 +15,7 @@ pub fn parse_and_validate_proof(proof_bytes: &[u8], expected_scheme: u8) -> ZkpR
             MAX_PROOF_TOTAL_BYTES
         )));
     }
-    let proof = Proof::from_bytes(proof_bytes)
-        .ok_or_else(|| ZkpError::InvalidProofFormat("failed to parse proof".to_string()))?;
+    let proof = Proof::from_bytes(proof_bytes)?;
 
     if proof.version != PROOF_VERSION {
         return Err(ZkpError::InvalidProofFormat(format!(
@@ -97,13 +96,31 @@ pub fn reconstruct_bulletproofs_proof(proof_bytes: &[u8], commitment: &[u8]) -> 
 }
 
 /// Create a new proof with the given scheme and components
-pub fn create_proof(
-    scheme_id: u8,
-    proof_bytes: Vec<u8>,
-    commitment: Vec<u8>,
-) -> ZkpResult<Vec<u8>> {
-    let proof = Proof::new(scheme_id, proof_bytes, commitment);
-    Ok(proof.to_bytes())
+pub fn create_proof(scheme_id: u8, proof_bytes: Vec<u8>, commitment: Vec<u8>) -> Vec<u8> {
+    Proof::new(scheme_id, proof_bytes, commitment).to_bytes()
+}
+
+/// Deserialize `[u32 set_len][u64 * set_len]` from the start of `data`, returning the set and the remaining bytes (e.g. SNARK proof).
+pub fn deserialize_embedded_set_prefix(data: &[u8], max_set_len: usize) -> Option<(Vec<u64>, &[u8])> {
+    if data.len() < 4 {
+        return None;
+    }
+    let set_size = u32::from_le_bytes(data[0..4].try_into().ok()?) as usize;
+    if set_size == 0 || set_size > max_set_len {
+        return None;
+    }
+    let needed = set_size.checked_mul(8)?.checked_add(4)?;
+    if data.len() <= needed {
+        return None;
+    }
+    let mut set = Vec::with_capacity(set_size);
+    let mut offset = 4usize;
+    for _ in 0..set_size {
+        let val_bytes: [u8; 8] = data.get(offset..offset + 8)?.try_into().ok()?;
+        set.push(u64::from_le_bytes(val_bytes));
+        offset += 8;
+    }
+    Some((set, &data[needed..]))
 }
 
 /// Validate standard 32-byte commitment
@@ -176,38 +193,14 @@ pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
             BulletproofsBackend::verify_threshold(&backend_proof, threshold)
         }
         4 => {
-            if proof.proof.len() < 4 || proof.commitment.len() != 32 {
+            if proof.commitment.len() != 32 {
                 return false;
             }
-            let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
-                Ok(arr) => arr,
-                Err(_) => return false,
-            };
-            let set_size = u32::from_le_bytes(set_size_bytes) as usize;
-            if set_size == 0 || set_size > MAX_SET_SIZE {
-                return false;
-            }
-            let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
-                Some(n) => n,
+            let (set, snark_bytes) = match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE)
+            {
+                Some(p) => p,
                 None => return false,
             };
-            if proof.proof.len() <= needed {
-                return false;
-            }
-            let mut set = Vec::with_capacity(set_size);
-            let mut offset = 4;
-            for _ in 0..set_size {
-                let val_bytes: [u8; 8] = match proof.proof.get(offset..offset + 8) {
-                    Some(slice) => match slice.try_into() {
-                        Ok(arr) => arr,
-                        Err(_) => return false,
-                    },
-                    None => return false,
-                };
-                set.push(u64::from_le_bytes(val_bytes));
-                offset += 8;
-            }
-            let snark_bytes = &proof.proof[needed..];
             if snark_bytes.is_empty() {
                 return false;
             }

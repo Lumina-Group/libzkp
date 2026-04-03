@@ -1,4 +1,5 @@
 use super::ZkpBackend;
+use crate::utils::encoding::read_u64_le;
 use crate::utils::error_handling::ZkpError;
 use ark_bn254::{Bn254, Fr};
 use ark_crypto_primitives::crh::constraints::CRHSchemeGadget;
@@ -115,6 +116,30 @@ fn persist_pk_vk(
     })?;
 
     Ok(())
+}
+
+type SnarkKeyPair = (
+    ark_groth16::ProvingKey<Bn254>,
+    ark_groth16::VerifyingKey<Bn254>,
+);
+
+fn load_or_generate_setup<G>(prefix: &str, generate: G) -> Result<SnarkKeyPair, String>
+where
+    G: FnOnce() -> Result<SnarkKeyPair, String>,
+{
+    if let Some((pk_path, vk_path)) = key_paths(prefix) {
+        match load_pk_vk(&pk_path, &vk_path)? {
+            Some(pair) => return Ok(pair),
+            None => {
+                let pair = generate()?;
+                if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
+                    let _ = e;
+                }
+                return Ok(pair);
+            }
+        }
+    }
+    generate()
 }
 
 pub fn set_snark_key_dir(path: &str) -> Result<(), ZkpError> {
@@ -363,21 +388,7 @@ impl SnarkBackend {
         ),
         String,
     > {
-        if let Some((pk_path, vk_path)) = key_paths("membership") {
-            match load_pk_vk(&pk_path, &vk_path)? {
-                Some(pair) => return Ok(pair),
-                None => {
-                    let pair = Self::generate_membership_setup()?;
-                    if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
-                        // Production safety: avoid writing to stderr from a library.
-                        // Persistence failures are non-fatal; callers can still use in-memory keys.
-                        let _ = e;
-                    }
-                    return Ok(pair);
-                }
-            }
-        }
-        Self::generate_membership_setup()
+        load_or_generate_setup("membership", || Self::generate_membership_setup())
     }
 
     fn generate_membership_setup() -> Result<
@@ -416,21 +427,7 @@ impl SnarkBackend {
         ),
         String,
     > {
-        if let Some((pk_path, vk_path)) = key_paths("equality") {
-            match load_pk_vk(&pk_path, &vk_path)? {
-                Some(pair) => return Ok(pair),
-                None => {
-                    let pair = Self::generate_equality_setup()?;
-                    if let Err(e) = persist_pk_vk(&pair.0, &pair.1, &pk_path, &vk_path) {
-                        // Production safety: avoid writing to stderr from a library.
-                        // Persistence failures are non-fatal; callers can still use in-memory keys.
-                        let _ = e;
-                    }
-                    return Ok(pair);
-                }
-            }
-        }
-        Self::generate_equality_setup()
+        load_or_generate_setup("equality", || Self::generate_equality_setup())
     }
 
     fn generate_equality_setup() -> Result<
@@ -604,20 +601,18 @@ impl ZkpBackend for SnarkBackend {
         if data.len() != 48 {
             return vec![];
         }
-        let a_bytes: [u8; 8] = match data[0..8].try_into() {
-            Ok(arr) => arr,
-            Err(_) => return vec![],
+        let a = match read_u64_le(data, 0) {
+            Some(v) => v,
+            None => return vec![],
         };
-        let b_bytes: [u8; 8] = match data[8..16].try_into() {
-            Ok(arr) => arr,
-            Err(_) => return vec![],
+        let b = match read_u64_le(data, 8) {
+            Some(v) => v,
+            None => return vec![],
         };
         let hash_input: [u8; 32] = match data[16..48].try_into() {
             Ok(arr) => arr,
             Err(_) => return vec![],
         };
-        let a = u64::from_le_bytes(a_bytes);
-        let b = u64::from_le_bytes(b_bytes);
 
         Self::prove_equality_zk(a, b, hash_input)
     }

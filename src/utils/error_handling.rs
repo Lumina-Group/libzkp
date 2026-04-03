@@ -12,8 +12,6 @@ pub enum ZkpError {
     InvalidProofFormat(String),
     BackendError(String),
     SerializationError(String),
-    ValidationError(String),
-    IntegerOverflow(String),
     CryptoError(String),
     ConfigError(String),
 }
@@ -27,8 +25,6 @@ impl fmt::Display for ZkpError {
             ZkpError::InvalidProofFormat(msg) => write!(f, "Invalid proof format: {}", msg),
             ZkpError::BackendError(msg) => write!(f, "Backend error: {}", msg),
             ZkpError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
-            ZkpError::ValidationError(msg) => write!(f, "Validation error: {}", msg),
-            ZkpError::IntegerOverflow(msg) => write!(f, "Integer overflow: {}", msg),
             ZkpError::CryptoError(msg) => write!(f, "Cryptographic error: {}", msg),
             ZkpError::ConfigError(msg) => write!(f, "Configuration error: {}", msg),
         }
@@ -41,12 +37,7 @@ impl std::error::Error for ZkpError {}
 impl From<ZkpError> for PyErr {
     fn from(err: ZkpError) -> Self {
         match err {
-            ZkpError::InvalidInput(msg) | ZkpError::ValidationError(msg) => {
-                PyValueError::new_err(msg)
-            }
-            ZkpError::IntegerOverflow(msg) => {
-                PyErr::new::<pyo3::exceptions::PyOverflowError, _>(msg)
-            }
+            ZkpError::InvalidInput(msg) => PyValueError::new_err(msg),
             ZkpError::InvalidProofFormat(msg) | ZkpError::ConfigError(msg) => {
                 PyTypeError::new_err(msg)
             }

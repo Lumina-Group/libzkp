@@ -27,18 +27,6 @@ pub fn commit_with_context(values: &[u64], context: &[u8]) -> Vec<u8> {
     hasher.finalize().to_vec()
 }
 
-/// Verify that a commitment matches the expected value
-pub fn verify_commitment(commitment: &[u8], value: u64) -> bool {
-    let expected = commit_value(value);
-    commitment == expected
-}
-
-/// Verify that a commitment matches the expected values
-pub fn verify_commitment_values(commitment: &[u8], values: &[u64]) -> bool {
-    let expected = commit_values(values);
-    commitment == expected
-}
-
 /// Create a 32-byte SHA-256 commitment binding `(old, new)` for improvement proofs.
 pub fn commit_improvement(old: u64, new: u64) -> ZkpResult<Vec<u8>> {
     if new <= old {

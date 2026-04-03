@@ -16,7 +16,7 @@ pub fn prove_threshold(values: Vec<u64>, threshold: u64) -> ZkpResult<Vec<u8>> {
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;
 
-    create_proof(SCHEME_ID, proof_bytes, commitment)
+    Ok(create_proof(SCHEME_ID, proof_bytes, commitment))
 }
 
 pub fn verify_threshold(proof: Vec<u8>, threshold: u64) -> bool {

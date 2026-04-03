@@ -317,7 +317,7 @@ except ValueError as e:
 1. **バッチ処理**: 複数の証明を生成する場合は、バッチ処理APIを使用
 2. **並列検証**: 複数の証明を検証する場合は、`verify_proofs_parallel`を使用
 3. **キャッシング**: 同じパラメータで繰り返し証明を生成する場合は、キャッシュ機能を活用
-4. **パフォーマンス監視**: `enable_performance_monitoring`でメトリクスを収集
+4. **パフォーマンス監視**: `get_performance_metrics`でメトリクスを取得（収集は初回利用時に初期化）
 
 ## API リファレンス
 

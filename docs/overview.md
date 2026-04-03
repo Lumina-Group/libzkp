@@ -57,8 +57,7 @@
 | `get_cache_stats()` | キャッシュ統計（`size`）を返します。 |
 | `verify_proofs_parallel(proofs)` | 複数の証明を並列で検証します。 |
 | `benchmark_proof_generation(proof_type, iterations)` | 証明生成のベンチマークを実行します。 |
-| `enable_performance_monitoring()` | パフォーマンス監視を初期化します。 |
-| `get_performance_metrics()` | パフォーマンスメトリクスを取得します。 |
+| `get_performance_metrics()` | パフォーマンスメトリクスを取得します（収集器は初回利用時に初期化）。 |
 
 #### 複合証明とメタデータ
 | 関数名 | 説明 |
@@ -141,8 +140,6 @@ libzkpは以下のエラータイプを提供します：
 - `InvalidProofFormat`: 無効な証明フォーマット
 - `BackendError`: バックエンドエラー
 - `SerializationError`: シリアライズ/デシリアライズ失敗
-- `ValidationError`: 入力検証エラー
-- `IntegerOverflow`: 整数オーバーフロー
 - `CryptoError`: 暗号処理の失敗
 - `ConfigError`: 設定値の不正
 

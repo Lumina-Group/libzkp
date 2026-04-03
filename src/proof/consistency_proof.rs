@@ -16,7 +16,7 @@ pub fn prove_consistency(data: Vec<u64>) -> ZkpResult<Vec<u8>> {
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;
 
-    create_proof(SCHEME_ID, proof_bytes, commitment)
+    Ok(create_proof(SCHEME_ID, proof_bytes, commitment))
 }
 
 pub fn verify_consistency(proof: Vec<u8>) -> bool {

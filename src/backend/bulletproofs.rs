@@ -1,4 +1,5 @@
 use super::ZkpBackend;
+use crate::utils::encoding::read_u64_le;
 use bulletproofs::{BulletproofGens, PedersenGens, RangeProof};
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
@@ -43,6 +44,23 @@ fn decode_proof_body_and_commit(data: &[u8]) -> Option<(&[u8], &[u8])> {
     ))
 }
 
+fn bp_gens_pair(party_capacity: usize) -> (PedersenGens, BulletproofGens) {
+    let pc_gens = PedersenGens::default();
+    let bp_gens = BulletproofGens::new(64, party_capacity);
+    (pc_gens, bp_gens)
+}
+
+fn random_blinding() -> Scalar {
+    let mut rng = OsRng;
+    let mut bytes = [0u8; 32];
+    rng.fill_bytes(&mut bytes);
+    Scalar::from_bytes_mod_order(bytes)
+}
+
+fn parse_compressed_32(slice: &[u8]) -> Option<CompressedRistretto> {
+    CompressedRistretto::from_slice(slice.get(..32)?).ok()
+}
+
 pub struct BulletproofsBackend;
 
 impl BulletproofsBackend {
@@ -51,13 +69,8 @@ impl BulletproofsBackend {
             return Err("value out of range".to_string());
         }
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, 2);
-        let mut rng = OsRng;
-
-        let mut blinding_bytes = [0u8; 32];
-        rng.fill_bytes(&mut blinding_bytes);
-        let blinding = Scalar::from_bytes_mod_order(blinding_bytes);
+        let (pc_gens, bp_gens) = bp_gens_pair(2);
+        let blinding = random_blinding();
 
         let value_commit = pc_gens.commit(Scalar::from(value), blinding).compress();
 
@@ -116,9 +129,9 @@ impl BulletproofsBackend {
             None => return false,
         };
 
-        let value_commit = match CompressedRistretto::from_slice(commit_slice) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let value_commit = match parse_compressed_32(commit_slice) {
+            Some(c) => c,
+            None => return false,
         };
         let value_commit_point: RistrettoPoint = match value_commit.decompress() {
             Some(p) => p,
@@ -130,13 +143,13 @@ impl BulletproofsBackend {
         if reader.len() < 16 {
             return false;
         }
-        let proof_min = match reader[0..8].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return false,
+        let proof_min = match read_u64_le(reader, 0) {
+            Some(v) => v,
+            None => return false,
         };
-        let proof_max = match reader[8..16].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return false,
+        let proof_max = match read_u64_le(reader, 8) {
+            Some(v) => v,
+            None => return false,
         };
         if proof_min != min || proof_max != max {
             return false;
@@ -184,18 +197,17 @@ impl BulletproofsBackend {
         if reader.len() < 64 {
             return false;
         }
-        let diff_min_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let diff_min_commit = match parse_compressed_32(reader) {
+            Some(c) => c,
+            None => return false,
         };
-        let diff_max_commit = match CompressedRistretto::from_slice(&reader[32..64]) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let diff_max_commit = match parse_compressed_32(&reader[32..]) {
+            Some(c) => c,
+            None => return false,
         };
         // No further payload is expected after this point.
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, 2);
+        let (pc_gens, bp_gens) = bp_gens_pair(2);
 
         // Recompute expected diff commitments from the value commitment
         let expected_min_commit = (value_commit_point - (Scalar::from(min) * pc_gens.B)).compress();
@@ -253,13 +265,8 @@ impl BulletproofsBackend {
             return Err("threshold not met".to_string());
         }
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, values.len() + 1);
-        let mut rng = OsRng;
-
-        let mut sum_blinding_bytes = [0u8; 32];
-        rng.fill_bytes(&mut sum_blinding_bytes);
-        let sum_blinding = Scalar::from_bytes_mod_order(sum_blinding_bytes);
+        let (pc_gens, bp_gens) = bp_gens_pair(values.len() + 1);
+        let sum_blinding = random_blinding();
 
         let sum_commit = pc_gens.commit(Scalar::from(sum), sum_blinding).compress();
 
@@ -300,15 +307,10 @@ impl BulletproofsBackend {
             return Err("data inconsistent".to_string());
         }
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, data.len() * 2);
-        let mut rng = OsRng;
-
+        let (pc_gens, bp_gens) = bp_gens_pair(data.len() * 2);
         let mut blindings = Vec::with_capacity(data.len());
         for _ in 0..data.len() {
-            let mut bytes = [0u8; 32];
-            rng.fill_bytes(&mut bytes);
-            blindings.push(Scalar::from_bytes_mod_order(bytes));
+            blindings.push(random_blinding());
         }
         let mut commitments = Vec::with_capacity(data.len());
         for (i, &value) in data.iter().enumerate() {
@@ -397,9 +399,9 @@ impl BulletproofsBackend {
         let mut commitments = Vec::with_capacity(num_values);
         for _ in 0..num_values {
             let commit_bytes = &reader[0..32];
-            let commit = match CompressedRistretto::from_slice(commit_bytes) {
-                Ok(c) => c,
-                Err(_) => return false,
+            let commit = match parse_compressed_32(commit_bytes) {
+                Some(c) => c,
+                None => return false,
             };
             commitments.push(commit);
             reader = &reader[32..];
@@ -414,8 +416,7 @@ impl BulletproofsBackend {
             return false;
         }
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, num_values * 2);
+        let (pc_gens, bp_gens) = bp_gens_pair(num_values * 2);
 
         // Read range proofs into memory
         let mut range_proofs = Vec::with_capacity(num_values.saturating_sub(1));
@@ -445,9 +446,9 @@ impl BulletproofsBackend {
             if reader.len() < 32 {
                 return false;
             }
-            let diff_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-                Ok(c) => c,
-                Err(_) => return false,
+            let diff_commit = match parse_compressed_32(reader) {
+                Some(c) => c,
+                None => return false,
             };
             reader = &reader[32..];
 
@@ -489,9 +490,9 @@ impl BulletproofsBackend {
         if reader.len() < 8 {
             return false;
         }
-        let proof_threshold = match reader[0..8].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return false,
+        let proof_threshold = match read_u64_le(reader, 0) {
+            Some(v) => v,
+            None => return false,
         };
         if proof_threshold != threshold {
             return false;
@@ -520,19 +521,18 @@ impl BulletproofsBackend {
         if reader.len() < 32 {
             return false;
         }
-        let diff_commit = match CompressedRistretto::from_slice(&reader[0..32]) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let diff_commit = match parse_compressed_32(reader) {
+            Some(c) => c,
+            None => return false,
         };
         // No further payload is expected after this point.
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, 2);
+        let (pc_gens, bp_gens) = bp_gens_pair(2);
 
         // Recompute expected diff commit from sum commit and threshold linkage
-        let sum_commit = match CompressedRistretto::from_slice(sum_commit_slice) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let sum_commit = match parse_compressed_32(sum_commit_slice) {
+            Some(c) => c,
+            None => return false,
         };
         let sum_commit_point = match sum_commit.decompress() {
             Some(p) => p,
@@ -563,17 +563,13 @@ impl ZkpBackend for BulletproofsBackend {
         if data.len() != 8 {
             return vec![];
         }
-        let value = match data.try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return vec![],
+        let value = match read_u64_le(data, 0) {
+            Some(v) => v,
+            None => return vec![],
         };
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, 1);
-        let mut rng = OsRng;
-        let mut bytes = [0u8; 32];
-        rng.fill_bytes(&mut bytes);
-        let blinding = Scalar::from_bytes_mod_order(bytes);
+        let (pc_gens, bp_gens) = bp_gens_pair(1);
+        let blinding = random_blinding();
 
         let mut transcript = Transcript::new(b"libzkp_bulletproof");
         let (proof, commit) = match RangeProof::prove_single(
@@ -605,13 +601,12 @@ impl ZkpBackend for BulletproofsBackend {
             Err(_) => return false,
         };
 
-        let commit = match CompressedRistretto::from_slice(commit_bytes) {
-            Ok(c) => c,
-            Err(_) => return false,
+        let commit = match parse_compressed_32(commit_bytes) {
+            Some(c) => c,
+            None => return false,
         };
 
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(64, 1);
+        let (pc_gens, bp_gens) = bp_gens_pair(1);
         let mut transcript = Transcript::new(b"libzkp_bulletproof");
 
         proof

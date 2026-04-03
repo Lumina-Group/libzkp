@@ -2,7 +2,9 @@ use crate::backend::snark::{SnarkBackend, MAX_SET_SIZE};
 use crate::proof::Proof;
 use crate::utils::commitment::commit_value;
 use crate::utils::error_handling::{ZkpError, ZkpResult};
-use crate::utils::proof_helpers::{parse_and_validate_proof, validate_standard_commitment};
+use crate::utils::proof_helpers::{
+    deserialize_embedded_set_prefix, parse_and_validate_proof, validate_standard_commitment,
+};
 use crate::utils::validation::{validate_membership_params, validate_set_size};
 
 const SCHEME_ID: u8 = 4;
@@ -45,36 +47,14 @@ pub fn verify_membership(proof: Vec<u8>, set: Vec<u64>) -> bool {
         return false;
     }
 
-    if proof.proof.len() < 4 {
-        return false;
-    }
-    let set_size_bytes: [u8; 4] = match proof.proof[0..4].try_into() {
-        Ok(arr) => arr,
-        Err(_) => return false,
-    };
-    let set_size = u32::from_le_bytes(set_size_bytes) as usize;
-    let needed = match set_size.checked_mul(8).and_then(|v| v.checked_add(4)) {
-        Some(n) => n,
+    let (embedded_set, snark_bytes) = match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE)
+    {
+        Some(p) => p,
         None => return false,
     };
-    if proof.proof.len() <= needed {
+    if snark_bytes.is_empty() {
         return false;
     }
-    let mut embedded_set = Vec::with_capacity(set_size);
-    let mut offset = 4;
-    for _ in 0..set_size {
-        let val_bytes: [u8; 8] = match proof.proof.get(offset..offset + 8) {
-            Some(slice) => match slice.try_into() {
-                Ok(arr) => arr,
-                Err(_) => return false,
-            },
-            None => return false,
-        };
-        let val = u64::from_le_bytes(val_bytes);
-        embedded_set.push(val);
-        offset += 8;
-    }
-    let snark_bytes = &proof.proof[needed..];
 
     if set.len() != embedded_set.len() {
         return false;

@@ -1,4 +1,5 @@
 use super::ZkpBackend;
+use crate::utils::encoding::read_u64_le;
 use winter_utils::Serializable;
 use winterfell::{
     crypto::{hashers::Blake3_256, DefaultRandomCoin, MerkleTree},
@@ -217,13 +218,13 @@ impl ZkpBackend for StarkBackend {
             return vec![];
         }
 
-        let old = match data[0..8].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return vec![],
+        let old = match read_u64_le(data, 0) {
+            Some(v) => v,
+            None => return vec![],
         };
-        let new = match data[8..16].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return vec![],
+        let new = match read_u64_le(data, 8) {
+            Some(v) => v,
+            None => return vec![],
         };
 
         match Self::prove_improvement(old, new) {
@@ -237,13 +238,13 @@ impl ZkpBackend for StarkBackend {
             return false;
         }
 
-        let old = match data[0..8].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return false,
+        let old = match read_u64_le(data, 0) {
+            Some(v) => v,
+            None => return false,
         };
-        let new = match data[8..16].try_into() {
-            Ok(arr) => u64::from_le_bytes(arr),
-            Err(_) => return false,
+        let new = match read_u64_le(data, 8) {
+            Some(v) => v,
+            None => return false,
         };
 
         Self::verify_improvement(proof, old, new).unwrap_or(false)

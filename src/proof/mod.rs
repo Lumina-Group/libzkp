@@ -1,3 +1,5 @@
+use crate::utils::error_handling::{ZkpError, ZkpResult};
+
 pub const PROOF_VERSION: u8 = 2;
 
 #[derive(Debug, Clone)]
@@ -33,31 +35,51 @@ impl Proof {
         out
     }
 
-    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+    pub fn from_bytes(data: &[u8]) -> ZkpResult<Self> {
         use crate::utils::limits::{
             MAX_COMMITMENT_BYTES, MAX_PROOF_PAYLOAD_BYTES, MAX_PROOF_TOTAL_BYTES,
         };
 
         if data.len() > MAX_PROOF_TOTAL_BYTES {
-            return None;
+            return Err(ZkpError::InvalidProofFormat(format!(
+                "proof too large: max {} bytes",
+                MAX_PROOF_TOTAL_BYTES
+            )));
         }
         if data.len() < 10 {
-            return None;
+            return Err(ZkpError::InvalidProofFormat(
+                "proof too short for header".to_string(),
+            ));
         }
         let version = data[0];
         let scheme = data[1];
-        let proof_len = u32::from_le_bytes(data[2..6].try_into().ok()?) as usize;
-        let comm_len = u32::from_le_bytes(data[6..10].try_into().ok()?) as usize;
+        let proof_len = u32::from_le_bytes(
+            data[2..6]
+                .try_into()
+                .map_err(|_| ZkpError::InvalidProofFormat("invalid proof length field".to_string()))?,
+        ) as usize;
+        let comm_len = u32::from_le_bytes(
+            data[6..10]
+                .try_into()
+                .map_err(|_| ZkpError::InvalidProofFormat("invalid commitment length field".to_string()))?,
+        ) as usize;
         if proof_len > MAX_PROOF_PAYLOAD_BYTES || comm_len > MAX_COMMITMENT_BYTES {
-            return None;
+            return Err(ZkpError::InvalidProofFormat(
+                "proof or commitment payload exceeds limit".to_string(),
+            ));
         }
-        let total = 10usize.checked_add(proof_len)?.checked_add(comm_len)?;
+        let total = 10usize
+            .checked_add(proof_len)
+            .and_then(|t| t.checked_add(comm_len))
+            .ok_or_else(|| ZkpError::InvalidProofFormat("proof length overflow".to_string()))?;
         if data.len() != total {
-            return None;
+            return Err(ZkpError::InvalidProofFormat(
+                "proof byte length mismatch".to_string(),
+            ));
         }
         let proof = data[10..10 + proof_len].to_vec();
         let commitment = data[10 + proof_len..].to_vec();
-        Some(Proof {
+        Ok(Proof {
             version,
             scheme,
             proof,

@@ -171,9 +171,7 @@ impl CompositeProof {
                 ));
             }
 
-            let proof = Proof::from_bytes(&data[offset..next]).ok_or_else(|| {
-                ZkpError::InvalidProofFormat("invalid proof in composite".to_string())
-            })?;
+            let proof = Proof::from_bytes(&data[offset..next])?;
 
             proofs.push(proof);
             offset = next;

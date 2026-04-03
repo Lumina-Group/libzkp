@@ -1,4 +1,5 @@
 use crate::utils::error_handling::{ZkpError, ZkpResult};
+use crate::utils::proof_helpers::{is_ascending_order, safe_sum};
 
 /// Validate range parameters
 pub fn validate_range_params(value: u64, min: u64, max: u64) -> ZkpResult<()> {
@@ -30,11 +31,7 @@ pub fn validate_threshold_params(values: &[u64], threshold: u64) -> ZkpResult<u6
         return Err(ZkpError::InvalidInput("values cannot be empty".to_string()));
     }
 
-    let sum = values.iter().try_fold(0u64, |acc, &val| {
-        acc.checked_add(val).ok_or_else(|| {
-            ZkpError::InvalidInput("integer overflow in sum calculation".to_string())
-        })
-    })?;
+    let sum = safe_sum(values)?;
 
     if sum < threshold {
         return Err(ZkpError::InvalidInput(format!(
@@ -79,17 +76,10 @@ pub fn validate_consistency_params(data: &[u64]) -> ZkpResult<()> {
         return Err(ZkpError::InvalidInput("data cannot be empty".to_string()));
     }
 
-    if data.len() == 1 {
-        return Ok(()); // Single element is always consistent
-    }
-
-    for window in data.windows(2) {
-        if window[0] > window[1] {
-            return Err(ZkpError::InvalidInput(format!(
-                "data is not in ascending order: {} > {}",
-                window[0], window[1]
-            )));
-        }
+    if !is_ascending_order(data) {
+        return Err(ZkpError::InvalidInput(
+            "data is not in ascending order".to_string(),
+        ));
     }
 
     Ok(())
