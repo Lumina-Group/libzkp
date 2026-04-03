@@ -34,6 +34,8 @@ js-sys = { version = "0.3", optional = true }
 getrandom = { version = "0.2", features = ["js"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
+# Enable no_cc for wasm32 builds (clear_on_drop is a transitive dep of bulletproofs)
+clear_on_drop = { version = "0.2", features = ["no_cc"], optional = true }
 
 [features]
 default = ["python", "parallel"]
@@ -43,4 +45,4 @@ python = ["dep:pyo3"]
 # Enable when building the Python extension module (e.g. via maturin).
 python-extension = ["python", "pyo3/extension-module"]
 # WASM target for browser-side proof generation
-wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:getrandom", "dep:serde", "dep:serde-wasm-bindgen"]
+wasm = ["dep:wasm-bindgen", "dep:js-sys", "dep:getrandom", "dep:serde", "dep:serde-wasm-bindgen", "dep:clear_on_drop"]

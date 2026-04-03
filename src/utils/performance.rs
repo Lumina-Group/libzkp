@@ -1,18 +1,33 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+
+#[cfg(not(target_arch = "wasm32"))]
+fn now_ms() -> f64 {
+    static EPOCH: OnceLock<Instant> = OnceLock::new();
+    let epoch = EPOCH.get_or_init(Instant::now);
+    epoch.elapsed().as_secs_f64() * 1000.0
+}
+
+#[cfg(target_arch = "wasm32")]
+fn now_ms() -> f64 {
+    js_sys::Date::now()
+}
 
 /// Simple TTL cache with LFU-style eviction when at capacity (not LRU).
 pub struct ProofCache {
     cache: Arc<Mutex<HashMap<String, CacheEntry>>>,
     max_size: usize,
-    ttl: Duration,
+    ttl_ms: f64,
 }
 
 #[derive(Debug, Clone)]
 struct CacheEntry {
     data: Vec<u8>,
-    created_at: Instant,
+    created_at_ms: f64,
     access_count: u64,
 }
 
@@ -21,7 +36,7 @@ impl ProofCache {
         ProofCache {
             cache: Arc::new(Mutex::new(HashMap::new())),
             max_size,
-            ttl: Duration::from_secs(ttl_seconds),
+            ttl_ms: (ttl_seconds as f64) * 1000.0,
         }
     }
 
@@ -29,18 +44,15 @@ impl ProofCache {
         let mut cache = self.cache.lock().ok()?;
 
         if let Some(entry) = cache.get_mut(key) {
-            // Check if entry is still valid
-            if entry.created_at.elapsed() < self.ttl {
+            if (now_ms() - entry.created_at_ms) < self.ttl_ms {
                 entry.access_count += 1;
                 record_global_cache_hit();
                 return Some(entry.data.clone());
             } else {
-                // Entry expired, remove it
                 cache.remove(key);
             }
         }
 
-        // Not found
         record_global_cache_miss();
         None
     }
@@ -48,10 +60,9 @@ impl ProofCache {
     pub fn put(&self, key: String, data: Vec<u8>) {
         let mut cache = match self.cache.lock() {
             Ok(guard) => guard,
-            Err(_) => return, // lock poisoned; skip put
+            Err(_) => return,
         };
 
-        // If cache is full, evict one entry with the lowest access count (LFU-style).
         if cache.len() >= self.max_size {
             let victim_key = cache
                 .iter()
@@ -65,7 +76,7 @@ impl ProofCache {
 
         let entry = CacheEntry {
             data,
-            created_at: Instant::now(),
+            created_at_ms: now_ms(),
             access_count: 1,
         };
 
@@ -194,24 +205,25 @@ impl Default for PerformanceMetrics {
     }
 }
 
-/// Timing utilities for performance measurement
+/// Timing utilities for performance measurement (works on both native and WASM).
 pub struct Timer {
-    start: Instant,
+    start_ms: f64,
 }
 
 impl Timer {
     pub fn new() -> Self {
         Timer {
-            start: Instant::now(),
+            start_ms: now_ms(),
         }
     }
 
     pub fn elapsed(&self) -> Duration {
-        self.start.elapsed()
+        let diff = now_ms() - self.start_ms;
+        Duration::from_secs_f64(diff / 1000.0)
     }
 
     pub fn reset(&mut self) {
-        self.start = Instant::now();
+        self.start_ms = now_ms();
     }
 }
 
