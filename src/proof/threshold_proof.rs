@@ -21,9 +21,8 @@ pub fn prove_threshold_with_bits(
 ) -> ZkpResult<Vec<u8>> {
     validate_threshold_params(&values, threshold)?;
 
-    let backend_proof =
-        BulletproofsBackend::prove_threshold_bits(values, threshold, n_bits)
-            .map_err(|e| crate::utils::error_handling::ZkpError::InvalidInput(e))?;
+    let backend_proof = BulletproofsBackend::prove_threshold_bits(values, threshold, n_bits)
+        .map_err(|e| crate::utils::error_handling::ZkpError::InvalidInput(e))?;
 
     let (proof_bytes, commitment) = extract_bulletproofs_components(&backend_proof)?;
 

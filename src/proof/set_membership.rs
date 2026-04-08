@@ -47,11 +47,11 @@ pub fn verify_membership(proof: Vec<u8>, set: Vec<u64>) -> bool {
         return false;
     }
 
-    let (embedded_set, snark_bytes) = match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE)
-    {
-        Some(p) => p,
-        None => return false,
-    };
+    let (embedded_set, snark_bytes) =
+        match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE) {
+            Some(p) => p,
+            None => return false,
+        };
     if snark_bytes.is_empty() {
         return false;
     }

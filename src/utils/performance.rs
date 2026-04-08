@@ -223,9 +223,7 @@ pub struct Timer {
 
 impl Timer {
     pub fn new() -> Self {
-        Timer {
-            start_ms: now_ms(),
-        }
+        Timer { start_ms: now_ms() }
     }
 
     pub fn elapsed(&self) -> Duration {

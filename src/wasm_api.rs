@@ -18,8 +18,7 @@ pub fn verify_range_wasm(proof: &[u8], min: u64, max: u64) -> bool {
 
 #[wasm_bindgen]
 pub fn prove_membership_wasm(value: u64, set: &[u64]) -> Result<Vec<u8>, JsError> {
-    set_membership::prove_membership(value, set.to_vec())
-        .map_err(|e| JsError::new(&e.to_string()))
+    set_membership::prove_membership(value, set.to_vec()).map_err(|e| JsError::new(&e.to_string()))
 }
 
 #[wasm_bindgen]
@@ -49,12 +48,17 @@ pub fn commit_with_context_wasm(values: &[u64], context: &[u8]) -> Vec<u8> {
 }
 
 #[wasm_bindgen]
-pub fn create_composite_proof_wasm(proofs_flat: &[u8], lengths: &[u32]) -> Result<Vec<u8>, JsError> {
+pub fn create_composite_proof_wasm(
+    proofs_flat: &[u8],
+    lengths: &[u32],
+) -> Result<Vec<u8>, JsError> {
     let mut proof_list = Vec::new();
     let mut offset = 0usize;
     for &len in lengths {
         let len = len as usize;
-        let end = offset.checked_add(len).ok_or_else(|| JsError::new("overflow"))?;
+        let end = offset
+            .checked_add(len)
+            .ok_or_else(|| JsError::new("overflow"))?;
         if end > proofs_flat.len() {
             return Err(JsError::new("proof data out of bounds"));
         }

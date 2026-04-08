@@ -4,6 +4,15 @@ pub use composite::*;
 pub mod batch;
 pub use batch::*;
 
+#[cfg(feature = "batch-store")]
+pub mod batch_store;
+
+#[cfg(feature = "batch-store")]
+pub use batch_store::{
+    export_proof_batch_to_path, get_batch_store_dir, import_proof_batch_from_path,
+    list_batch_ids_in_store, set_batch_store_dir,
+};
+
 use std::collections::HashMap;
 
 use crate::proof::Proof;

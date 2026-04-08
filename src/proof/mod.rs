@@ -53,16 +53,13 @@ impl Proof {
         }
         let version = data[0];
         let scheme = data[1];
-        let proof_len = u32::from_le_bytes(
-            data[2..6]
-                .try_into()
-                .map_err(|_| ZkpError::InvalidProofFormat("invalid proof length field".to_string()))?,
-        ) as usize;
-        let comm_len = u32::from_le_bytes(
-            data[6..10]
-                .try_into()
-                .map_err(|_| ZkpError::InvalidProofFormat("invalid commitment length field".to_string()))?,
-        ) as usize;
+        let proof_len =
+            u32::from_le_bytes(data[2..6].try_into().map_err(|_| {
+                ZkpError::InvalidProofFormat("invalid proof length field".to_string())
+            })?) as usize;
+        let comm_len = u32::from_le_bytes(data[6..10].try_into().map_err(|_| {
+            ZkpError::InvalidProofFormat("invalid commitment length field".to_string())
+        })?) as usize;
         if proof_len > MAX_PROOF_PAYLOAD_BYTES || comm_len > MAX_COMMITMENT_BYTES {
             return Err(ZkpError::InvalidProofFormat(
                 "proof or commitment payload exceeds limit".to_string(),

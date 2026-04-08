@@ -71,6 +71,30 @@ py_zkp!(process_batch, Vec<Vec<u8>>, batch_id: u64 => crate::advanced::process_b
 py_zkp!(get_batch_status, HashMap<String, usize>, batch_id: u64 => crate::advanced::get_batch_status(batch_id));
 py_zkp!(clear_batch, (), batch_id: u64 => crate::advanced::clear_batch(batch_id));
 
+#[cfg(feature = "batch-store")]
+#[pyfunction]
+fn set_batch_store_dir(path: String) -> PyResult<()> {
+    crate::advanced::batch_store::set_batch_store_dir(path).map_err(Into::into)
+}
+
+#[cfg(feature = "batch-store")]
+#[pyfunction]
+fn get_batch_store_dir() -> PyResult<Option<String>> {
+    Ok(crate::advanced::batch_store::get_batch_store_dir()
+        .map(|p| p.to_string_lossy().into_owned()))
+}
+
+#[cfg(feature = "batch-store")]
+py_zkp!(list_batch_ids_in_store, Vec<u64>,  => crate::advanced::batch_store::list_batch_ids_in_store());
+#[cfg(feature = "batch-store")]
+py_zkp!(open_batch_from_store, (), batch_id: u64 => crate::advanced::open_batch_from_store(batch_id));
+#[cfg(feature = "batch-store")]
+py_zkp!(refresh_batch_from_store, (), batch_id: u64 => crate::advanced::refresh_batch_from_store(batch_id));
+#[cfg(feature = "batch-store")]
+py_zkp!(export_batch_to_file, (), batch_id: u64, dest: String => crate::advanced::export_batch_to_file(batch_id, dest));
+#[cfg(feature = "batch-store")]
+py_zkp!(import_batch_from_file, u64, src: String => crate::advanced::import_batch_from_file(src));
+
 #[pyfunction]
 fn benchmark_proof_generation(
     py: Python<'_>,
@@ -125,5 +149,15 @@ pub fn register_module(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()>
     m.add_function(wrap_pyfunction!(process_batch, m)?)?;
     m.add_function(wrap_pyfunction!(get_batch_status, m)?)?;
     m.add_function(wrap_pyfunction!(clear_batch, m)?)?;
+    #[cfg(feature = "batch-store")]
+    {
+        m.add_function(wrap_pyfunction!(set_batch_store_dir, m)?)?;
+        m.add_function(wrap_pyfunction!(get_batch_store_dir, m)?)?;
+        m.add_function(wrap_pyfunction!(list_batch_ids_in_store, m)?)?;
+        m.add_function(wrap_pyfunction!(open_batch_from_store, m)?)?;
+        m.add_function(wrap_pyfunction!(refresh_batch_from_store, m)?)?;
+        m.add_function(wrap_pyfunction!(export_batch_to_file, m)?)?;
+        m.add_function(wrap_pyfunction!(import_batch_from_file, m)?)?;
+    }
     Ok(())
 }

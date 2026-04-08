@@ -101,7 +101,10 @@ pub fn create_proof(scheme_id: u8, proof_bytes: Vec<u8>, commitment: Vec<u8>) ->
 }
 
 /// Deserialize `[u32 set_len][u64 * set_len]` from the start of `data`, returning the set and the remaining bytes (e.g. SNARK proof).
-pub fn deserialize_embedded_set_prefix(data: &[u8], max_set_len: usize) -> Option<(Vec<u64>, &[u8])> {
+pub fn deserialize_embedded_set_prefix(
+    data: &[u8],
+    max_set_len: usize,
+) -> Option<(Vec<u64>, &[u8])> {
     if data.len() < 4 {
         return None;
     }
@@ -199,11 +202,11 @@ pub fn verify_proof_cryptographic(proof: &Proof) -> bool {
             if proof.commitment.len() != 32 {
                 return false;
             }
-            let (set, snark_bytes) = match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE)
-            {
-                Some(p) => p,
-                None => return false,
-            };
+            let (set, snark_bytes) =
+                match deserialize_embedded_set_prefix(&proof.proof, MAX_SET_SIZE) {
+                    Some(p) => p,
+                    None => return false,
+                };
             if snark_bytes.is_empty() {
                 return false;
             }

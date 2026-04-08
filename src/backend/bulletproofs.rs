@@ -263,8 +263,7 @@ impl BulletproofsBackend {
         let (pc_gens, bp_gens) = bp_gens_pair_bits(n_bits, 2);
 
         let expected_min_commit = (value_commit_point - (Scalar::from(min) * pc_gens.B)).compress();
-        let expected_max_commit =
-            ((Scalar::from(max) * pc_gens.B) - value_commit_point).compress();
+        let expected_max_commit = ((Scalar::from(max) * pc_gens.B) - value_commit_point).compress();
 
         if expected_min_commit != diff_min_commit || expected_max_commit != diff_max_commit {
             return false;

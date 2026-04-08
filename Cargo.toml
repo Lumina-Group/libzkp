@@ -33,13 +33,16 @@ wasm-bindgen = { version = "0.2", optional = true }
 js-sys = { version = "0.3", optional = true }
 getrandom = { version = "0.2", features = ["js"], optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
+bincode = { version = "1.3", optional = true }
+fs4 = { version = "0.12", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 # Enable no_cc for wasm32 builds (clear_on_drop is a transitive dep of bulletproofs)
 clear_on_drop = { version = "0.2", features = ["no_cc"], optional = true }
 
 [features]
-default = ["python", "parallel"]
+default = ["python", "parallel", "batch-store"]
 parallel = ["dep:rayon"]
+batch-store = ["dep:serde", "dep:bincode", "dep:fs4"]
 # Rust-only library build: `cargo build --no-default-features`
 python = ["dep:pyo3"]
 # Enable when building the Python extension module (e.g. via maturin).

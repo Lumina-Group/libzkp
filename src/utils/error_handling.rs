@@ -14,6 +14,7 @@ pub enum ZkpError {
     SerializationError(String),
     CryptoError(String),
     ConfigError(String),
+    StorageError(String),
 }
 
 impl fmt::Display for ZkpError {
@@ -27,6 +28,7 @@ impl fmt::Display for ZkpError {
             ZkpError::SerializationError(msg) => write!(f, "Serialization error: {}", msg),
             ZkpError::CryptoError(msg) => write!(f, "Cryptographic error: {}", msg),
             ZkpError::ConfigError(msg) => write!(f, "Configuration error: {}", msg),
+            ZkpError::StorageError(msg) => write!(f, "Storage error: {}", msg),
         }
     }
 }
@@ -41,6 +43,7 @@ impl From<ZkpError> for PyErr {
             ZkpError::InvalidProofFormat(msg) | ZkpError::ConfigError(msg) => {
                 PyTypeError::new_err(msg)
             }
+            ZkpError::StorageError(msg) => PyRuntimeError::new_err(msg),
             _ => PyRuntimeError::new_err(err.to_string()),
         }
     }

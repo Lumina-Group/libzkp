@@ -112,11 +112,12 @@ flowchart TB
 
 | フィーチャ | 効果 |
 | --- | --- |
-| `default` | `python` + `parallel`（`rayon` による並列化） |
+| `default` | `python` + `parallel` + `batch-store` |
 | `python` | `pyo3`、Python モジュール `libzkp` |
 | `python-extension` | 共有ライブラリとしてロードする拡張向け（`extension-module`） |
 | `wasm` | `wasm-bindgen`、`getrandom` の `js`、WASM 向け `clear_on_drop` など |
 | `parallel` | `rayon`（無効時は Rust のみ・依存縮小） |
+| `batch-store` | 証明バッチのディスク永続化（`serde` / `bincode` / `fs4`）、`advanced::batch_store` |
 
 - **`--no-default-features`** で Python を外した **純 Rust ライブラリ**ビルドが可能。
 - **WASM** では `crate-type` に `cdylib` が含まれるため、`wasm32-unknown-unknown` 向けに `wasm` フィーチャを有効してビルドする想定（`pkg/` への出力は別手順）。
@@ -130,6 +131,8 @@ flowchart TB
 5. **検証側**: `from_bytes` → スキーム ID に応じてバックエンドの `verify_*` を呼ぶ。
 
 `advanced` の **キャッシュ**は主にキー生成と保存で、暗号学的には同一パラメータなら同一証明バイト列が返る想定の最適化です（用途に応じて無効化・クリアを検討）。
+
+`batch-store` 有効時、`advanced::batch` はオプションで **ディレクトリ内の `batch_*.bin`** にバッチ操作列を保存し、ファイルロック付きで読み書きします（マルチプロセスでは単一ライター前提で `refresh_batch_from_store` により他プロセスの更新を取り込む想定）。
 
 ## エラーと境界
 

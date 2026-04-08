@@ -200,6 +200,23 @@ print(f"Range proofs: {status['range_proofs']}")
 batch_results = libzkp.process_batch(batch_id)
 ```
 
+#### バッチのディスク永続化（オプション）
+
+```python
+# ディレクトリを指定（または環境変数 LIBZKP_BATCH_DIR）
+libzkp.set_batch_store_dir("C:/zkp_batches")
+
+bid = libzkp.create_proof_batch()
+libzkp.batch_add_range_proof(bid, 10, 0, 100)
+# 別プロセスが同じバッチ ID のファイルへ追記したあと、このプロセスのメモリへ反映:
+libzkp.refresh_batch_from_store(bid)
+
+# 再起動後など、まだメモリに載っていない ID をディスクから読み込む:
+# libzkp.open_batch_from_store(existing_id)
+```
+
+同一 `batch_id` に対する複数プロセスからの同時 `batch_add_*` は想定外です（単一ライター推奨）。バッチファイルにはパラメータが平文で含まれます。
+
 #### SNARK鍵の永続化と再利用
 
 ```python
@@ -324,7 +341,7 @@ except ValueError as e:
 
 - **複合証明の `composition_hash`**: 末尾の値は証明列とメタデータに対する **整合性用の SHA-256 ダイジェスト**です。**鍵を伴わない**ため、同じ内容を知る者は誰でも同じ値を再計算でき、MAC のような発行者認証や秘匿性はありません。束ねたバイト列が意図したものかの検査に使い、**偽証耐性は各内側証明の暗号検証**に依存します。発行者認証が必要な場合は、複合証明バイト列に対する **アプリ層の署名や MAC** を別途使ってください。
 - **キャッシュ**: `prove_range_cached` 等は **プロセス内**のキャッシュにパラメータ由来の情報が残り得ます。キャッシュキーにはプロセス固有の値が混ざりますが、同一プロセス内では入力に応じて一意に決まります。秘密をそのままキーに含めないでください。機密性の高い環境では **`clear_cache` を使う**か、キャッシュを使わない通常の証明 API を選んでください。
-- **バッチ**: バッチ ID は **暗号学的乱数（`u64`）**で同一プロセス内の推測を緩和していますが、レジストリは **インメモリ**であり、マルチプロセス共有や再起動後の永続化は想定されていません。
+- **バッチ**: バッチ ID は **暗号学的乱数（`u64`）**で同一プロセス内の推測を緩和しています。デフォルトではレジストリは **インメモリ**です。オプションで `set_batch_store_dir` または `LIBZKP_BATCH_DIR` によりディスクへ永続化し、他プロセスが書いた内容は `refresh_batch_from_store`、コールドスタートは `open_batch_from_store` で取り込めます（詳細は [api.md](docs/api.md)）。
 - **依存関係**: 公開されている脆弱性への対応のため、**`cargo audit`（または同等）でアドバイザリを追跡**してください。本リポジトリでは CI で `cargo audit` を実行します（`.github/workflows` を参照）。
 
 ## API リファレンス

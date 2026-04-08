@@ -9,6 +9,7 @@
 - **高度な機能**: バッチ処理、並列検証、キャッシング、メタデータサポート
 - **包括的なエラーハンドリング**: 詳細なエラーメッセージ（内部のロック失敗やセットアップ失敗は例外として返却）
 - **SNARK鍵の永続化**: 環境変数`LIBZKP_SNARK_KEY_DIR`またはPython API `set_snark_key_dir`でGroth16鍵をディスクに保存し、再起動後も再利用
+- **バッチの永続化（オプション）**: `LIBZKP_BATCH_DIR` または `set_batch_store_dir` で証明バッチをディスクに保存し、`open_batch_from_store` / `refresh_batch_from_store` でマルチプロセス・再起動後に再利用
 
 ## Python API
 
@@ -49,6 +50,13 @@
 | `process_batch(batch_id)` | バッチ内の全証明を並列生成します（処理後、この `batch_id` は消費されます）。 |
 | `get_batch_status(batch_id)` | バッチの状態を取得します。 |
 | `clear_batch(batch_id)` | バッチをクリアします。 |
+| `set_batch_store_dir(path)` | バッチ永続化ディレクトリを設定します（`LIBZKP_BATCH_DIR` より優先）。 |
+| `get_batch_store_dir()` | 現在のストアパス、または未設定時は `None`。 |
+| `list_batch_ids_in_store()` | ストア内のバッチ ID 一覧。 |
+| `open_batch_from_store(batch_id)` | ディスク上のバッチをこのプロセスへ読み込みます。 |
+| `refresh_batch_from_store(batch_id)` | メモリ上のバッチをディスク内容で置き換えます。 |
+| `export_batch_to_file(batch_id, dest)` | メモリ上のバッチをファイルへ書き出します。 |
+| `import_batch_from_file(src)` | ファイルから新しいバッチ ID で読み込みます。 |
 
 #### パフォーマンス機能
 | 関数名 | 説明 |

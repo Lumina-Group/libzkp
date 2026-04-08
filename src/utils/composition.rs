@@ -333,11 +333,13 @@ impl CompositeProof {
 }
 
 /// Batch proof operations for improved performance
+#[derive(Clone)]
 pub struct ProofBatch {
     operations: Vec<BatchOperation>,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "batch-store", derive(serde::Serialize, serde::Deserialize))]
 pub enum BatchOperation {
     RangeProof { value: u64, min: u64, max: u64 },
     EqualityProof { val1: u64, val2: u64 },
@@ -394,6 +396,13 @@ impl ProofBatch {
 
     pub fn operations(&self) -> &[BatchOperation] {
         &self.operations
+    }
+}
+
+#[cfg(feature = "batch-store")]
+impl ProofBatch {
+    pub(crate) fn from_operations(operations: Vec<BatchOperation>) -> Self {
+        Self { operations }
     }
 }
 

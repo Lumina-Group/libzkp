@@ -20,9 +20,11 @@ pub fn prove_equality(val1: u64, val2: u64) -> ZkpResult<Vec<u8>> {
     let snark_proof = SnarkBackend::prove_equality_zk(val1, val2, commitment_arr);
 
     if snark_proof.is_empty() {
-        return Err(crate::utils::error_handling::ZkpError::ProofGenerationFailed(
-            "SNARK proof generation failed".to_string(),
-        ));
+        return Err(
+            crate::utils::error_handling::ZkpError::ProofGenerationFailed(
+                "SNARK proof generation failed".to_string(),
+            ),
+        );
     }
 
     let proof = Proof::new(SCHEME_ID, snark_proof, commitment);
