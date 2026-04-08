@@ -1,0 +1,7 @@
+# cargo-audit: https://github.com/rustsec/rustsec/tree/main/cargo-audit
+#
+# RUSTSEC-2025-0055 (tracing-subscriber): 修正版は >=0.3.20 だが、crates.io の ark-relations 0.5.1 は
+# tracing-subscriber ^0.2 に固定。git の ark-relations は 0.3 だが ark 0.5.x と API 非互換。
+# 追跡: https://github.com/arkworks-rs/snark/issues/413
+[advisories]
+ignore = ["RUSTSEC-2025-0055"]

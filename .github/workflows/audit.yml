@@ -21,11 +21,13 @@ jobs:
           tool: cargo-audit@0.22
       - name: cargo audit
         run: |
-          # ワークスペースの Cargo.lock はリポジトリルート（メンバー直下の Cargo.lock は使わない）
+          # RUSTSEC-2025-0055: ark-relations が tracing-subscriber 0.2 に固定（.cargo/audit.toml も参照）
+          # CI では cwd やリポジトリ構成の差で設定が拾えない場合があるためフラグも明示する
+          IGNORE_TS="--ignore RUSTSEC-2025-0055"
           if [ -f Cargo.lock ]; then
-            cargo audit -f Cargo.lock
+            cargo audit -f Cargo.lock $IGNORE_TS
           elif [ -f libzkp/Cargo.toml ]; then
-            (cd libzkp && cargo audit)
+            (cd libzkp && cargo audit $IGNORE_TS)
           else
-            cargo audit
+            cargo audit $IGNORE_TS
           fi
