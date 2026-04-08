@@ -70,7 +70,7 @@ pub fn validate_improvement_params(old: u64, new: u64) -> ZkpResult<u64> {
     Ok(new - old)
 }
 
-/// Validate consistency parameters (ascending order)
+/// Validate consistency parameters (monotonic non-decreasing order)
 pub fn validate_consistency_params(data: &[u64]) -> ZkpResult<()> {
     if data.is_empty() {
         return Err(ZkpError::InvalidInput("data cannot be empty".to_string()));
@@ -78,7 +78,7 @@ pub fn validate_consistency_params(data: &[u64]) -> ZkpResult<()> {
 
     if !is_ascending_order(data) {
         return Err(ZkpError::InvalidInput(
-            "data is not in ascending order".to_string(),
+            "data is not monotonic non-decreasing".to_string(),
         ));
     }
 

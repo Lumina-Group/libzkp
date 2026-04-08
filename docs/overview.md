@@ -1,6 +1,6 @@
 # libzkp ドキュメント
 
-`libzkp` は高性能なゼロ知識証明ライブラリです。Rustで実装され、Pythonバインディングを提供します。等価性証明については SNARK (Groth16) を用い、回路内で 64-bit 整数制約と SHA-256 コミットメント整合性を検証します（8バイトLEの整数に対するSHA-256の32バイト値を公開入力として32個のフィールド要素にマップして検証）。
+`libzkp` は高性能なゼロ知識証明ライブラリです。Rust で実装され、Python バインディングを提供します。等価性・集合所属の SNARK (Groth16) は、64-bit 整数制約に加え **MiMC-5（BN254 Fr）由来の 32 バイト値コミットメント**を公開入力として整合させます（`snark_commit_value` と同じ定義）。SHA-256 コミットメントではありません。
 
 ## 主な特徴
 
@@ -20,18 +20,19 @@
 | `verify_range(proof, min, max)` | 範囲証明を検証します。 | Bulletproofs |
 | `prove_equality(val1, val2)` | 2 つの値が等しいことを示す証明を生成します。 | SNARK |
 | `verify_equality(proof, val1, val2)` | 等価性証明を値を用いて検証します。 | SNARK |
-| `verify_equality_with_commitment(proof, expected_commitment)` | 期待コミットメント（32バイト）を用いて検証します。 | SNARK |
+| `verify_equality_with_commitment(proof, expected_commitment)` | 期待コミットメント（32バイト、MiMC）を用いて検証します。 | SNARK |
+| `snark_commit_value(value)` | Groth16 用の 32 バイト MiMC コミットメントを計算します。 | ユーティリティ |
 | `prove_threshold(values, threshold)` | `values` の総和が `threshold` 以上であることを示す証明を生成します。 | Bulletproofs |
 | `verify_threshold(proof, threshold)` | しきい値証明を検証します。 | Bulletproofs |
-| `prove_membership(value, set)` | 値が集合 `set` に含まれることを、値とインデックスを秘匿したまま証明します。 | SNARK |
+| `prove_membership(value, set)` | 値とインデックスを秘匿しつつ集合に属することを証明します（**集合 `set` は検証時に公開**）。 | SNARK |
 | `verify_membership(proof, set)` | 集合所属証明を検証します。 | SNARK |
 | `prove_improvement(old, new)` | `old` から `new` へ値が増加したことを示す証明を生成します。 | STARK |
 | `verify_improvement(proof, old)` | 向上証明を検証します。 | STARK |
-| `prove_consistency(data)` | 昇順に並んだデータ列であることを示す整合性証明を生成します。 | Bulletproofs |
+| `prove_consistency(data)` | 単調非減少のデータ列であることを示す整合性証明を生成します。 | Bulletproofs |
 | `verify_consistency(proof)` | 整合性証明を検証します。 | Bulletproofs |
 
 補足:
-- 集合所属証明の `set` は **1〜64要素**をサポートします（64を超えると証明生成に失敗します）。
+- 集合所属証明の `set` は **1〜64要素**をサポートします（64を超えると証明生成に失敗します）。検証者は `set` を知っている必要があります。
 
 ### 高度な機能
 

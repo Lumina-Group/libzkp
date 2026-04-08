@@ -12,7 +12,7 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 - **多様な証明タイプ**: 6種類の実用的なゼロ知識証明をサポート
 - **複数のバックエンド**: Bulletproofs、SNARK、STARK の3つのバックエンド
 - **Python統合**: シンプルで使いやすい Python API
-- **型安全**: Rust の型システムによる安全性
+- **Rust での堅牢性**: 型と所有権により実装ミスを抑止（暗号スキームとしての安全性は各バックエンドの仮定に依存）
 
 ### 高度な機能
 - **証明合成**: 複数の証明を組み合わせた複合証明の作成・検証
@@ -31,9 +31,9 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 | **範囲証明** (Range Proof) | 値が指定された範囲内にあることを証明 | 年齢証明、残高証明 | Bulletproofs |
 | **等価性証明** (Equality Proof) | 2つの値が等しいことを証明 | 身元確認、データ整合性 | SNARK (Groth16) |
 | **しきい値証明** (Threshold Proof) | 値の合計が閾値以上であることを証明 | 投票システム、資産証明 | Bulletproofs |
-| **集合所属証明** (Set Membership Proof) | 値が特定の集合に含まれることを、値とインデックスを秘匿したまま証明 | ホワイトリスト、権限管理 | SNARK (Groth16) |
-| **向上証明** (Improvement Proof) | 値が増加したことを証明 | 成績向上、パフォーマンス改善 | STARK |
-| **整合性証明** (Consistency Proof) | データが昇順に並んでいることを証明 | データ検証、監査 | Bulletproofs |
+| **集合所属証明** (Set Membership Proof) | 値が集合のいずれかに等しいことを、値と選択インデックスを秘匿して証明（**集合そのものは検証時に検証者が知る公開入力**） | ホワイトリスト、権限管理 | SNARK (Groth16) |
+| **向上証明** (Improvement Proof) | `old` から `new` へ値が増加したことを証明（**証明バイトに `new` が含まれる**ため、新値を検証者に秘匿する用途には不向き） | 成績向上、パフォーマンス改善 | STARK |
+| **整合性証明** (Consistency Proof) | データ列が**単調非減少**であることを証明（隣接で `a[i] <= a[i+1]`、同一値の連続を許す） | データ検証、監査 | Bulletproofs |
 
 ## バックエンド
 
@@ -44,12 +44,12 @@ libzkp は、Python、Rust から利用可能なゼロ知識証明 (Zero-Knowled
 
 ### SNARK (Groth16)
 - **特徴**: 非常に小さい証明サイズ、高速な検証
-- **用途**: 等価性証明（8バイトLE整数のSHA-256コミットメントを公開入力として32個のフィールド要素にマッピングして検証）
+- **用途**: 等価性・集合所属。公開入力の値コミットメントは **MiMC-5（BN254 Fr）から導いた 32 バイト**（SHA-256 ではない）。`verify_equality_with_commitment` では `snark_commit_value` で同じコミットメントを計算する。
 - **実装**: arkworks ライブラリ (ark-groth16) を使用
 
 ### STARK
-- **特徴**: 量子耐性、透明性（信頼されたセットアップ不要）
-- **用途**: 向上証明
+- **特徴**: 透明性（trusted setup 不要）。「量子耐性」や実効セキュリティは **Winterfell のパラメータ（クエリ数・ブローアップ・フィールドサイズ等）に依存**し、用途に応じた評価が必要。
+- **用途**: 向上証明（証明ペイロード先頭に `old` / `new` が平文で含まれる）
 - **実装**: winterfell フレームワークを使用
 
 ## 必要な環境
@@ -98,7 +98,6 @@ cargo build --no-default-features
 
 ```python
 import libzkp
-import hashlib
 
 # 範囲証明: 値10が0以上20以下の範囲にあることを証明
 proof = libzkp.prove_range(10, 0, 20)
@@ -108,8 +107,8 @@ assert libzkp.verify_range(proof, 0, 20)
 proof = libzkp.prove_equality(5, 5)
 # 値による検証
 assert libzkp.verify_equality(proof, 5, 5)
-# コミットメント指定による検証（32バイト）
-commit = hashlib.sha256((5).to_bytes(8, 'little')).digest()
+# コミットメント指定による検証（32バイト、Groth16 用 MiMC コミットメント）
+commit = libzkp.snark_commit_value(5)
 assert libzkp.verify_equality_with_commitment(proof, commit)
 
 # しきい値証明: 値の合計が閾値以上であることを証明
@@ -124,7 +123,7 @@ assert libzkp.verify_membership(proof, [1, 2, 3])
 proof = libzkp.prove_improvement(1, 8)
 assert libzkp.verify_improvement(proof, 1)
 
-# 整合性証明: データが昇順であることを証明
+# 整合性証明: データが単調非減少であることを証明
 proof = libzkp.prove_consistency([1, 2, 3])
 assert libzkp.verify_consistency(proof)
 ```
@@ -147,6 +146,8 @@ is_valid = libzkp.verify_composite_proof(composite_proof)
 ```
 
 #### パフォーマンス最適化とキャッシング
+
+プロセス内キャッシュに秘密値をキーとして載せないよう、運用上のキー設計に注意してください（詳細は下記「プライバシーと運用」）。
 
 ```python
 # キャッシュ機能付きの証明生成（高速化）
@@ -318,6 +319,13 @@ except ValueError as e:
 2. **並列検証**: 複数の証明を検証する場合は、`verify_proofs_parallel`を使用
 3. **キャッシング**: 同じパラメータで繰り返し証明を生成する場合は、キャッシュ機能を活用
 4. **パフォーマンス監視**: `get_performance_metrics`でメトリクスを取得（収集は初回利用時に初期化）
+
+## プライバシーと運用
+
+- **複合証明の合成ハッシュ**: 末尾の `composition_hash` は SHA-256 ですが **鍵を伴わない**ため、改ざん検知は「誰でも再計算できる」性質に近く、MAC のような秘匿性はありません。
+- **キャッシュ**: `prove_range_cached` 等は **プロセス内**のキャッシュにパラメータ由来の情報が残り得ます。秘密をそのままキーに含めないでください。
+- **バッチ**: バッチ ID は **同一プロセス内のインメモリ**であり、マルチプロセス共有や再起動後の永続化は想定されていません。
+- **依存関係**: 公開されている脆弱性への対応のため、**`cargo audit`（または同等）でアドバイザリを追跡**してください。
 
 ## API リファレンス
 

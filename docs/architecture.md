@@ -98,6 +98,8 @@ flowchart TB
 ### SNARK (`backend::snark`)
 
 - **Groth16**（`ark-groth16` + `ark-bn254`）で等価性・集合所属を実装。
+- いずれも値に対する公開コミットメントは **MiMC-5（BN254 Fr）→ 32 バイト**（`utils::commitment::commit_value_snark`）。SHA-256 ベースの `commit_value` とは別物で、README やサンプルで混同しないこと。
+- 集合所属では **集合は検証鍵に関連する公開入力**として扱われ、検証者は証明と同じ集合を渡す必要がある（集合そのものを「隠す」設計ではない）。
 - **proving key / verifying key** は環境変数 `LIBZKP_SNARK_KEY_DIR` または API `set_snark_key_dir` で指定したディスクに保存・読込し、プロセス間で再利用可能（`advanced` からも公開）。
 
 ### STARK (`backend::stark`)

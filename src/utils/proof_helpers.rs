@@ -134,7 +134,8 @@ pub fn validate_standard_commitment(commitment: &[u8]) -> ZkpResult<()> {
     Ok(())
 }
 
-/// Check if values are in ascending order
+/// Monotonic non-decreasing: `a[i] <= a[i+1]` for all adjacent pairs (duplicates allowed).
+/// This is not strict ascending (`<` only).
 pub fn is_ascending_order(values: &[u64]) -> bool {
     values.windows(2).all(|w| w[0] <= w[1])
 }

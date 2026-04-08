@@ -14,7 +14,7 @@ fn main() -> Result<(), ZkpError> {
     // 2) Equality proof (Groth16)
     let eq_proof = libzkp::proof::equality_proof::prove_equality(5, 5)?;
     let eq_ok = libzkp::proof::equality_proof::verify_equality(eq_proof.clone(), 5, 5);
-    let commitment = libzkp::utils::commitment::commit_value(5);
+    let commitment = libzkp::utils::commitment::commit_value_snark(5);
     let eq_ok_commit = libzkp::proof::equality_proof::verify_equality_with_commitment(
         eq_proof.clone(),
         commitment,

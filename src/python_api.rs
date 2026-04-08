@@ -27,6 +27,8 @@ py_ok!(verify_range, bool, proof: Vec<u8>, min: u64, max: u64 => crate::proof::r
 py_zkp!(prove_equality, Vec<u8>, val1: u64, val2: u64 => crate::proof::equality_proof::prove_equality(val1, val2));
 py_ok!(verify_equality, bool, proof: Vec<u8>, val1: u64, val2: u64 => crate::proof::equality_proof::verify_equality(proof, val1, val2));
 py_ok!(verify_equality_with_commitment, bool, proof: Vec<u8>, expected_commitment: Vec<u8> => crate::proof::equality_proof::verify_equality_with_commitment(proof, expected_commitment));
+// MiMC-5 (BN254 Fr) commitment for Groth16 proofs; exposed for `verify_equality_with_commitment` callers.
+py_ok!(snark_commit_value, Vec<u8>, value: u64 => crate::utils::commitment::commit_value_snark(value));
 
 py_zkp!(prove_threshold, Vec<u8>, values: Vec<u64>, threshold: u64 => crate::proof::threshold_proof::prove_threshold(values, threshold));
 py_ok!(verify_threshold, bool, proof: Vec<u8>, threshold: u64 => crate::proof::threshold_proof::verify_threshold(proof, threshold));
@@ -86,6 +88,7 @@ pub fn register_module(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()>
     m.add_function(wrap_pyfunction!(prove_equality, m)?)?;
     m.add_function(wrap_pyfunction!(verify_equality, m)?)?;
     m.add_function(wrap_pyfunction!(verify_equality_with_commitment, m)?)?;
+    m.add_function(wrap_pyfunction!(snark_commit_value, m)?)?;
     m.add_function(wrap_pyfunction!(prove_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(verify_threshold, m)?)?;
     m.add_function(wrap_pyfunction!(prove_membership, m)?)?;

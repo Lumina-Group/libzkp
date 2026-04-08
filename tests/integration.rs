@@ -8,6 +8,7 @@ use libzkp::proof::{
     consistency_proof, equality_proof, improvement_proof, range_proof, set_membership,
     threshold_proof,
 };
+use libzkp::utils::commitment::commit_value_snark;
 
 #[test]
 fn range_prove_verify() {
@@ -19,6 +20,13 @@ fn range_prove_verify() {
 fn equality_prove_verify() {
     let proof = equality_proof::prove_equality(3, 3).expect("prove");
     assert!(equality_proof::verify_equality(proof, 3, 3));
+}
+
+#[test]
+fn equality_verify_with_snark_commitment_roundtrip() {
+    let proof = equality_proof::prove_equality(42, 42).expect("prove");
+    let expected = commit_value_snark(42);
+    assert!(equality_proof::verify_equality_with_commitment(proof, expected));
 }
 
 #[test]
