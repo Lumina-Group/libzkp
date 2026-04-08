@@ -2,6 +2,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
+/// Per-process random bytes mixed into [`generate_cache_key`] so cache keys are not identical
+/// across processes for the same logical parameters.
+static CACHE_KEY_PROCESS_SALT: OnceLock<[u8; 32]> = OnceLock::new();
+
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
@@ -133,11 +137,18 @@ pub fn record_global_cache_miss() {
     }
 }
 
-/// Generate cache key for proof operations
+/// Generate cache key for proof operations.
+///
+/// The hash input includes a **process-unique 32-byte value** (generated once per process) so keys
+/// for the same `operation` and `params` differ across processes. This does not remove in-process
+/// linkage between parameters and cached proofs; use [`ProofCache::clear`] when required.
 pub fn generate_cache_key(operation: &str, params: &[u8]) -> String {
     use sha2::{Digest, Sha256};
 
+    let salt = CACHE_KEY_PROCESS_SALT.get_or_init(|| rand::random::<[u8; 32]>());
+
     let mut hasher = Sha256::new();
+    hasher.update(salt);
     hasher.update(operation.as_bytes());
     hasher.update(params);
 

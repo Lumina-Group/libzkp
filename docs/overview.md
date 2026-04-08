@@ -39,7 +39,7 @@
 #### バッチ処理
 | 関数名 | 説明 |
 | --- | --- |
-| `create_proof_batch()` | 新しい証明バッチを作成し、バッチIDを返します。 |
+| `create_proof_batch()` | 新しい証明バッチを作成し、バッチID（乱数 `u64`）を返します。 |
 | `batch_add_range_proof(batch_id, value, min, max)` | 範囲証明をバッチに追加します。 |
 | `batch_add_equality_proof(batch_id, val1, val2)` | 等価性証明をバッチに追加します。 |
 | `batch_add_threshold_proof(batch_id, values, threshold)` | しきい値証明をバッチに追加します。 |

@@ -7,12 +7,24 @@ use std::collections::HashMap;
 
 /// Composite proof that combines multiple individual proofs.
 ///
-/// - [`Self::verify_integrity`] checks the SHA-256 composition hash over **proofs and metadata** (encoding integrity).
-/// - [`Self::verify_cryptographic`] checks each inner proof with the appropriate ZKP backend (soundness).
+/// ## Integrity vs soundness
+///
+/// - [`Self::verify_integrity`] checks the SHA-256 digest in [`Self::composition_hash`]. This is an
+///   **unkeyed integrity digest**: it binds the serialized proofs and metadata so accidental
+///   corruption or inconsistent encoding is detected. Anyone who knows the same proofs and metadata
+///   can recompute the same digest; it does **not** provide issuer authentication or MAC-like secrecy.
+/// - [`Self::verify_cryptographic`] checks each inner proof with the appropriate ZKP backend
+///   (**soundness** against forged statements for those schemes).
+/// - For **issuer authentication** (proving who produced the composite blob), sign or MAC the
+///   serialized composite bytes at the application layer with your own keys.
+///
+/// The field is named `composition_hash` for backward compatibility; semantically it is a
+/// **composition integrity digest**, not a cryptographic MAC.
 #[derive(Debug, Clone)]
 pub struct CompositeProof {
     pub proofs: Vec<Proof>,
     pub metadata: HashMap<String, Vec<u8>>,
+    /// SHA-256 digest over proofs and canonical metadata (see [`CompositeProof`]).
     pub composition_hash: Vec<u8>,
 }
 
@@ -40,7 +52,10 @@ impl CompositeProof {
         self.composition_hash = Self::compute_composition_hash(&self.proofs, &self.metadata);
     }
 
-    /// Composition hash over proofs and canonical metadata (sorted keys) for tamper detection.
+    /// Unkeyed SHA-256 digest over proofs and canonical metadata (sorted keys).
+    ///
+    /// Used only to detect mismatches between the encoded body and the trailing digest; it does not
+    /// authenticate the producer. See [`CompositeProof`].
     fn compute_composition_hash(proofs: &[Proof], metadata: &HashMap<String, Vec<u8>>) -> Vec<u8> {
         let mut hasher = Sha256::new();
         hasher.update(b"COMPOSITE_PROOF:");

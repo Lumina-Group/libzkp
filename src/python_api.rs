@@ -60,16 +60,16 @@ py_zkp!(validate_proof_chain, bool, proof_chain: Vec<Vec<u8>> => crate::advanced
 py_zkp!(get_proof_info, HashMap<String, u64>, proof_bytes: Vec<u8> => crate::advanced::get_proof_info(proof_bytes));
 py_zkp!(set_snark_key_dir, bool, path: String => crate::advanced::set_snark_key_dir(path));
 py_zkp!(is_snark_setup_initialized, bool,  => crate::advanced::is_snark_setup_initialized());
-py_zkp!(create_proof_batch, usize,  => crate::advanced::create_proof_batch());
-py_zkp!(batch_add_range_proof, (), batch_id: usize, value: u64, min: u64, max: u64 => crate::advanced::batch_add_range_proof(batch_id, value, min, max));
-py_zkp!(batch_add_equality_proof, (), batch_id: usize, val1: u64, val2: u64 => crate::advanced::batch_add_equality_proof(batch_id, val1, val2));
-py_zkp!(batch_add_threshold_proof, (), batch_id: usize, values: Vec<u64>, threshold: u64 => crate::advanced::batch_add_threshold_proof(batch_id, values, threshold));
-py_zkp!(batch_add_membership_proof, (), batch_id: usize, value: u64, set: Vec<u64> => crate::advanced::batch_add_membership_proof(batch_id, value, set));
-py_zkp!(batch_add_improvement_proof, (), batch_id: usize, old: u64, new: u64 => crate::advanced::batch_add_improvement_proof(batch_id, old, new));
-py_zkp!(batch_add_consistency_proof, (), batch_id: usize, data: Vec<u64> => crate::advanced::batch_add_consistency_proof(batch_id, data));
-py_zkp!(process_batch, Vec<Vec<u8>>, batch_id: usize => crate::advanced::process_batch(batch_id));
-py_zkp!(get_batch_status, HashMap<String, usize>, batch_id: usize => crate::advanced::get_batch_status(batch_id));
-py_zkp!(clear_batch, (), batch_id: usize => crate::advanced::clear_batch(batch_id));
+py_zkp!(create_proof_batch, u64,  => crate::advanced::create_proof_batch());
+py_zkp!(batch_add_range_proof, (), batch_id: u64, value: u64, min: u64, max: u64 => crate::advanced::batch_add_range_proof(batch_id, value, min, max));
+py_zkp!(batch_add_equality_proof, (), batch_id: u64, val1: u64, val2: u64 => crate::advanced::batch_add_equality_proof(batch_id, val1, val2));
+py_zkp!(batch_add_threshold_proof, (), batch_id: u64, values: Vec<u64>, threshold: u64 => crate::advanced::batch_add_threshold_proof(batch_id, values, threshold));
+py_zkp!(batch_add_membership_proof, (), batch_id: u64, value: u64, set: Vec<u64> => crate::advanced::batch_add_membership_proof(batch_id, value, set));
+py_zkp!(batch_add_improvement_proof, (), batch_id: u64, old: u64, new: u64 => crate::advanced::batch_add_improvement_proof(batch_id, old, new));
+py_zkp!(batch_add_consistency_proof, (), batch_id: u64, data: Vec<u64> => crate::advanced::batch_add_consistency_proof(batch_id, data));
+py_zkp!(process_batch, Vec<Vec<u8>>, batch_id: u64 => crate::advanced::process_batch(batch_id));
+py_zkp!(get_batch_status, HashMap<String, usize>, batch_id: u64 => crate::advanced::get_batch_status(batch_id));
+py_zkp!(clear_batch, (), batch_id: u64 => crate::advanced::clear_batch(batch_id));
 
 #[pyfunction]
 fn benchmark_proof_generation(

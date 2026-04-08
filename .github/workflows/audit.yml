@@ -1,0 +1,27 @@
+# Runs `cargo audit` against the locked dependency tree (requires Cargo.lock committed).
+name: Security audit
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    # Weekly Monday 06:15 UTC
+    - cron: "15 6 * * 1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - name: cargo audit
+        run: |
+          if [ -f libzkp/Cargo.toml ]; then
+            (cd libzkp && cargo audit)
+          else
+            cargo audit
+          fi
