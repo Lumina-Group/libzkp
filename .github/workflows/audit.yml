@@ -17,10 +17,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-audit
+          # 0.22+ 推奨: advisory-db の CVSS 4.0 エントリを解釈できる
+          tool: cargo-audit@0.22
       - name: cargo audit
         run: |
-          if [ -f libzkp/Cargo.toml ]; then
+          # ワークスペースの Cargo.lock はリポジトリルート（メンバー直下の Cargo.lock は使わない）
+          if [ -f Cargo.lock ]; then
+            cargo audit -f Cargo.lock
+          elif [ -f libzkp/Cargo.toml ]; then
             (cd libzkp && cargo audit)
           else
             cargo audit

@@ -1,6 +1,7 @@
 //! Python bindings (PyO3). Built when the `python` feature is enabled.
 
 use pyo3::prelude::*;
+use pyo3::IntoPyObject;
 use std::collections::HashMap;
 
 macro_rules! py_zkp {
@@ -102,7 +103,7 @@ fn benchmark_proof_generation(
     iterations: u32,
 ) -> PyResult<PyObject> {
     let m = crate::advanced::benchmark_proof_generation(proof_type, iterations)?;
-    Ok(m.into_py(py))
+    Ok(m.into_pyobject(py)?.into_any().unbind())
 }
 
 /// Registers all Python-callable functions on the module `m`.
